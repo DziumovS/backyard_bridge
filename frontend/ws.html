@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport"
+              content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>Chat</title>
+    </head>
+    <body>
+        <h1>WebSocket Chat</h1>
+        <h2>Your name: <span id="ws-id"></span></h2>
+
+        <form id="nameForm" onsubmit="confirmName(event)">
+            <input type="text" id="nameInput" placeholder="Enter your name" maxlength="20" required />
+            <button type="submit">OK</button>
+        </form>
+
+        <button id="startButton" onclick="startGame()" disabled>Start</button>
+        <form action="" id="messageForm" onsubmit="sendMessage(event)" style="display: none;">
+            <input type="text" id="messageText" autocomplete="off"/>
+            <button>Send</button>
+        </form>
+        <ul id='messages'></ul>
+
+        <script>
+            let client_id = Date.now();
+            let player_name = client_id;
+            const wsIdElement = document.querySelector("#ws-id");
+            const nameForm = document.getElementById("nameForm");
+            const startButton = document.getElementById("startButton");
+            const messageForm = document.getElementById("messageForm");
+
+            wsIdElement.textContent = player_name;
+
+            let ws = new WebSocket(`ws://localhost:8000/ws/${client_id}`);
+
+            ws.onopen = function() {
+                ws.send(`NAME:${player_name}`);
+            };
+
+            ws.onmessage = function(event) {
+                let messages = document.getElementById('messages');
+                let message = document.createElement('li');
+                let content = document.createTextNode(event.data);
+
+                switch (event.data) {
+                    case "SYSTEM:START_GAME":
+                        startButton.style.display = "none";
+                        messageForm.style.display = "block";
+                        nameForm.style.display = "none";
+                        break;
+
+                    case "SYSTEM:SHOW_START_BUTTON":
+                        startButton.style.display = "block";
+                        messageForm.style.display = "none";
+                        break;
+
+                    case "SYSTEM:ENABLE_START_BUTTON":
+                        startButton.disabled = false;
+                        break;
+
+                    case "SYSTEM:DISABLE_START_BUTTON":
+                        startButton.disabled = true;
+                        break;
+
+                    default:
+                        message.appendChild(content);
+                        messages.appendChild(message);
+                        break;
+                }
+            };
+
+            function confirmName(event) {
+                event.preventDefault();
+                let nameInput = document.getElementById("nameInput").value.trim();
+                if (nameInput) {
+                    player_name = nameInput;
+                    wsIdElement.textContent = player_name;
+                    ws.send(`NAME:${player_name}`);
+                }
+                nameForm.style.display = "none";
+            }
+
+            function sendMessage(event) {
+                event.preventDefault();
+                let input = document.getElementById("messageText");
+                ws.send(input.value);
+                input.value = '';
+            }
+
+            function startGame() {
+                ws.send("WS:START_GAME");
+            }
+        </script>
+    </body>
+</html>
