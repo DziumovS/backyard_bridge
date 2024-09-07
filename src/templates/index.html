@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport"
+              content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <link rel="stylesheet" href="/static/css/styles.css">
+        <title>Backyard Bridge</title>
+    </head>
+
+    <body>
+        <h1>Backyard Bridge</h1>
+        <p>Your name: <span id="ws-id"></span></p>
+
+        <form id="nameForm" onsubmit="updateUsername(event)">
+            <input type="text" id="nameInput" placeholder="Enter your name" maxlength="20" />
+            <button type="submit">OK</button>
+        </form>
+
+        <button id="createLobbyButton" onclick="createLobby()">Create Lobby</button>
+        <input id="lobbyInput" placeholder="Enter lobby ID" style="display: inline;" />
+        <button id="joinLobbyButton" onclick="joinLobby()" disabled>Join Lobby</button>
+        <div id="errorMessage" style="color: red;"></div>
+        <div id="lobbyControls" style="display: none;">
+            <h2 id="lobbyMessage"></h2>
+            <button id="startButton" onclick="startGame()" style="display: none;" disabled>Start Game</button>
+            <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
+            <ul id="users"></ul>
+        </div>
+        <div id="game" style="display: none;">
+            <input id="messageInput" placeholder="Enter your message" />
+            <button onclick="sendMessage()">Send</button>
+            <ul id="messages"></ul>
+        </div>
+
+        <script>
+            let ws;
+            let lobbyId;
+            let userId = Date.now().toString();
+            let userName = userId;
+            let isHost = false;
+
+            const elements = {
+                wsId: document.querySelector("#ws-id"),
+                nameForm: document.getElementById("nameForm"),
+                createLobbyButton: document.getElementById("createLobbyButton"),
+                joinLobbyInput: document.getElementById("lobbyInput"),
+                joinLobbyButton: document.getElementById("joinLobbyButton"),
+                startButton: document.getElementById("startButton"),
+                leaveLobbyButton: document.getElementById("leaveButton"),
+                errorMessage: document.getElementById("errorMessage"),
+                lobbyControls: document.getElementById("lobbyControls"),
+                lobbyMessage: document.getElementById("lobbyMessage"),
+                usersList: document.getElementById("users"),
+                gameSection: document.getElementById("game"),
+                messageInput: document.getElementById("messageInput"),
+                messages: document.getElementById("messages")
+            };
+
+            elements.wsId.textContent = userName;
+
+            elements.joinLobbyInput.addEventListener('input', function () {
+                elements.joinLobbyButton.disabled = !elements.joinLobbyInput.value.trim();
+            });
+
+            function updateUsername(event) {
+                event.preventDefault();
+                const newName = document.getElementById("nameInput").value.trim();
+                if (newName) {
+                    userName = newName;
+                    elements.wsId.textContent = userName;
+                    elements.nameForm.style.display = "none";
+                }
+            }
+
+            function setLobbyUI(isHostView) {
+                elements.createLobbyButton.style.display = 'none';
+                elements.nameForm.style.display = "none";
+                elements.joinLobbyInput.style.display = 'none';
+                elements.joinLobbyButton.style.display = 'none';
+                elements.lobbyControls.style.display = "block";
+                elements.leaveLobbyButton.style.display = "inline";
+                elements.startButton.style.display = isHostView ? "block" : "none";
+                isHost = isHostView;
+            }
+
+            function createLobby() {
+                setLobbyUI(true);
+                initializeWebSocket('create_lobby', { user_name: userName });
+            }
+
+            async function joinLobby() {
+                const inputLobbyId = elements.joinLobbyInput.value.trim();
+                if (!inputLobbyId) return;
+
+                const response = await fetch(`/check_lobby/${inputLobbyId}`);
+                const data = await response.json();
+
+                if (data.exists) {
+                    setLobbyUI(false);
+                    initializeWebSocket('join_lobby', { user_name: userName, lobby_id: inputLobbyId });
+                } else {
+                    showError("The lobby doesn't exist or no slots");
+                }
+            }
+
+            function initializeWebSocket(type, message) {
+                if (ws) {
+                    ws.close(1000);
+                }
+                ws = new WebSocket(`ws://localhost:8000/ws/lobby/${userId}`);
+                ws.onopen = () => ws.send(JSON.stringify({ type, ...message }));
+                ws.onmessage = handleWebSocketMessage;
+            }
+
+            function handleWebSocketMessage(event) {
+                const data = JSON.parse(event.data);
+                switch (data.type) {
+                    case 'lobby_created':
+                        lobbyId = data.lobby_id;
+                        elements.lobbyMessage.textContent = `You created lobby with ID: ${lobbyId}`;
+                        break;
+                    case 'joined_lobby':
+                        lobbyId = data.lobby_id;
+                        elements.lobbyMessage.textContent = `You entered lobby with ID: ${lobbyId}`;
+                        updateUsers(data.users, false);
+                        break;
+                    case 'users_update':
+                        updateUsers(data.users, data.is_host);
+                        break;
+                    case 'start_game':
+                        startGame();
+                        break;
+                    case 'lobby_closed':
+                        returnToMainPage();
+                        break;
+                    case 'toggle_start_button':
+                        toggleStartButton(data.enable);
+                        break;
+                }
+            }
+
+            function showError(message) {
+                elements.errorMessage.textContent = message;
+                elements.errorMessage.style.display = "block";
+                setTimeout(() => elements.errorMessage.style.display = "none", 2000);
+            }
+
+            function startGame() {
+                if (isHost) {
+                    ws.send(JSON.stringify({ type: 'start_game' }));
+                }
+
+                ws = new WebSocket(`ws://localhost:8000/ws/game/${lobbyId}/${userId}`);
+                ws.onmessage = function (event) {
+                    const message = document.createElement("li");
+                    message.textContent = event.data;
+                    elements.messages.appendChild(message);
+                };
+
+                elements.lobbyControls.style.display = "none";
+                elements.gameSection.style.display = "block";
+            }
+
+            function leaveLobby() {
+                ws.send(JSON.stringify({ type: 'close_lobby', lobby_id: lobbyId }));
+
+                returnToMainPage();
+            }
+
+            function returnToMainPage() {
+                elements.lobbyControls.style.display = "none";
+                elements.gameSection.style.display = "none";
+                elements.createLobbyButton.style.display = 'inline';
+                elements.nameForm.style.display = "none";
+                elements.joinLobbyInput.style.display = 'inline';
+                elements.joinLobbyInput.value = '';
+                elements.joinLobbyButton.style.display = 'inline';
+                elements.joinLobbyButton.disabled = true;
+                elements.leaveLobbyButton.style.display = "none";
+                elements.errorMessage.style.display = "none";
+            }
+
+            function sendMessage() {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(elements.messageInput.value);
+                    elements.messageInput.value = '';
+                } else {
+                    console.error("WebSocket is not open.");
+                }
+            }
+
+            function updateUsers(users, isHost) {
+                elements.usersList.innerHTML = '';
+                users.forEach(user => {
+                    const userElement = document.createElement("li");
+                    userElement.textContent = user.user_name;
+                    elements.usersList.appendChild(userElement);
+                });
+                if (isHost) toggleStartButton(true);
+            }
+
+            function toggleStartButton(enable) {
+                elements.startButton.disabled = !enable;
+            }
+        </script>
+
+    </body>
+
+</html>
