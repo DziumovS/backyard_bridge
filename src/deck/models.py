@@ -12,13 +12,14 @@ class Card:
     def __str__(self):
         return f"{self.rank} {self.suit}"
 
-    # def can_play_on(self, other_card):
-    #     return self.color == other_card.color or self.value == other_card.value or self.color == "wild"
+    def can_play_on(self, other_card):
+        return self.rank == other_card.rank or self.suit == other_card.suit or self.rank == "J"
 
 
 class Deck:
     suits = ["♠", "♥", "♦", "♣"]
     ranks = ["6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+    special_cards = ["6", "7", "8", "J", "A"]
 
     def __init__(self):
         self.deck = self.create_deck()

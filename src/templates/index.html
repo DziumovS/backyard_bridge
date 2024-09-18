@@ -28,6 +28,10 @@
             <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
             <ul id="users"></ul>
         </div>
+        <div id="player-hand-container" style="display: none;">
+            <h2>Your Hand:</h2>
+            <ul id="player-hand"></ul>
+        </div>
         <div id="game" style="display: none;">
             <input id="messageInput" placeholder="Enter your message" />
             <button onclick="sendMessage()">Send</button>
@@ -55,7 +59,8 @@
                 usersList: document.getElementById("users"),
                 gameSection: document.getElementById("game"),
                 messageInput: document.getElementById("messageInput"),
-                messages: document.getElementById("messages")
+                messages: document.getElementById("messages"),
+                hand_container: document.getElementById("player-hand-container")
             };
 
             elements.wsId.textContent = userName;
@@ -138,6 +143,9 @@
                     case 'toggle_start_button':
                         toggleStartButton(data.enable);
                         break;
+                    case 'player_hand':
+                        updatePlayerHand(data.hand);
+                        break;
                 }
             }
 
@@ -161,6 +169,7 @@
 
                 elements.lobbyControls.style.display = "none";
                 elements.gameSection.style.display = "block";
+                elements.hand_container.style.display = "block";
             }
 
             function leaveLobby() {
@@ -203,6 +212,16 @@
 
             function toggleStartButton(enable) {
                 elements.startButton.disabled = !enable;
+            }
+
+            function updatePlayerHand(hand) {
+                const handList = document.getElementById("player-hand");
+                handList.innerHTML = '';
+                hand.forEach(card => {
+                    const cardElement = document.createElement("li");
+                    cardElement.textContent = `${card[0]} of ${card[1]}`;
+                    handList.appendChild(cardElement);
+                });
             }
         </script>
 

@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from src.connection.manager import ConnectionManager
 from src.lobby.manager import LobbyManager
 from src.game.manager import GameManager
+from src.game.models import Game
 from src.user.models import User
 
 
@@ -21,7 +22,7 @@ game_manager = GameManager(connection_manager)
 @router.get("/check_lobby/{lobby_id}")
 async def check_lobby(lobby_id: str):
     lobby = lobby_manager.lobbies.get(lobby_id)
-    exists = lobby is not None and len(lobby.users) < 6
+    exists = lobby is not None and len(lobby.users) < 4
     return JSONResponse(content={"exists": exists})
 
 
@@ -53,7 +54,8 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                 case "start_game":
                     game_data = await lobby_manager.handle_start_game(user_id=user_id)
                     game_id, players = game_data
-                    game_manager.create_game(game_id=game_id, players=players)
+                    game = Game(game_id=game_id, players=players)
+                    game_manager.create_game(game=game)
                     await lobby_manager.handle_disconnect_lobby(user_id=user_id)
                     break
 
@@ -62,5 +64,4 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
             case 1001 | 1012:
                 await lobby_manager.handle_disconnect_lobby(user_id=user_id, error=True)
             case _:
-                print(err)
                 pass

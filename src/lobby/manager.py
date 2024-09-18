@@ -30,7 +30,7 @@ class LobbyManager:
 
     async def update_start_button(self, lobby: Lobby):
         num_users = len(lobby.users)
-        enable_start = 2 <= num_users <= 6
+        enable_start = 2 <= num_users <= 4
         await self.connection_manager.send_message(
             websocket=lobby.host.websocket,
             message={"type": "toggle_start_button", "enable": enable_start}
