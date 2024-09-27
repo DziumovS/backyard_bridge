@@ -1,19 +1,20 @@
 from PIL import Image, ImageDraw, ImageFont
 
-
 suits = ["♠", "♥", "♦", "♣"]
 ranks = ["6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 
-card_width = 140
-card_height = 200
+card_width = 120
+card_height = 180
 corner_radius = 20
+border_color = "black"
+border_width = 1
 
 color_map = {"♠": "black", "♣": "black", "♥": "red", "♦": "red"}
+
 
 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 path_to_save = "../static/cards/"
-
 
 try:
     font_little = ImageFont.truetype(font_path, 20)
@@ -34,8 +35,17 @@ def create_rounded_rectangle(size, radius, fill):
 
 
 def create_card(rank, suit):
-    card_img = create_rounded_rectangle((card_width, card_height), corner_radius, "white")
+    card_img = Image.new("RGBA", (card_width, card_height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(card_img)
+
+    draw.rounded_rectangle(
+        [-1, 0, card_width, card_height],
+        corner_radius + border_width,
+        fill=border_color
+    )
+
+    card_background = create_rounded_rectangle((card_width - border_width * 2, card_height - border_width * 2), corner_radius, "white")
+    card_img.paste(card_background, (border_width, border_width), card_background)
 
     color = color_map[suit]
 
@@ -63,8 +73,23 @@ for suit in suits:
         file_name = f"{rank}_{suit}.png"
         card_img.save(f"{path_to_save}{file_name}")
 
-closed_card_img = create_rounded_rectangle((card_width, card_height), corner_radius, fill=(251, 186, 0))
+
+closed_card_img = Image.new("RGBA", (card_width, card_height), (255, 255, 255, 0))
 draw = ImageDraw.Draw(closed_card_img)
-draw.text((20, card_height / 3), "Mebelka's", font=font_little, fill="black")
-draw.text((22, card_height / 2), "BRIDGE", font=font_small, fill="black")
+draw.rounded_rectangle(
+    [-1, 0, card_width, card_height],
+    corner_radius + border_width,
+    fill=border_color
+)
+
+closed_card_background = create_rounded_rectangle(
+    (card_width - border_width * 2, card_height - border_width * 2),
+    corner_radius,
+    fill=(251, 186, 0)
+)
+closed_card_img.paste(closed_card_background, (border_width, border_width), closed_card_background)
+
+draw.text((5 + border_width, card_height / 3 + border_width), "Mebelka's", font=font_little, fill="black")
+draw.text((7 + border_width, card_height / 2 + border_width), "BRIDGE", font=font_small, fill="black")
+
 closed_card_img.save(f"{path_to_save}closed_card.png")
