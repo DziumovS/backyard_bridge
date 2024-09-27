@@ -5,7 +5,7 @@ from fastapi import WebSocket
 
 from src.connection.manager import ConnectionManager
 from src.user.models import Player
-from src.deck.models import Deck
+from src.deck.models import Card, Deck
 
 
 class Game:
@@ -24,11 +24,14 @@ class Game:
 
         self.current_card = self.card_distribution()
 
-    def card_distribution(self):
+    def card_distribution(self) -> Card:
         current_player_hand = self.players[self.current_player_index].hand
         played_card = current_player_hand.pop()
         self.deck.insert_to_bounce_deck(played_card=played_card)
         return played_card
+
+    def current_card_to_dict(self) -> Dict:
+        return self.current_card.card_to_dict()
 
     def shuffle_players(self, players: List[Player]) -> List[Player]:
         random.shuffle(players)
@@ -84,12 +87,12 @@ class Game:
             self.next_player()
 
     def player_turn(self, player: Player):
-        playable_cards = [card for card in player.hand if card.can_play_on(other_card=self.current_card)]
+        playable_cards = player.get_playable_cards(current_card=self.current_card)
         if not playable_cards:
             print(f"{player.user_name} has no playable cards, drawing a card.")
             player.draw_card(self.deck)
             print(f"Hand: {', '.join(str(card) for card in player.hand)}")
-            playable_cards = [card for card in player.hand if card.can_play_on(other_card=self.current_card)]
+            playable_cards = player.get_playable_cards(current_card=self.current_card)
             if not playable_cards:
                 print(f"{player.user_name} still has no playable cards. Next player turn.")
                 return
@@ -135,7 +138,7 @@ class Game:
     def _handle_card_six(self, player: Player):
         while True:
             print(f"Current card: {self.current_card}")
-            playable_cards = [card for card in player.hand if card.can_play_on(other_card=self.current_card)]
+            playable_cards = player.get_playable_cards(current_card=self.current_card)
             if not playable_cards:
                 player.draw_card(self.deck)
             else:
