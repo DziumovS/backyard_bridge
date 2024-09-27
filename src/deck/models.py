@@ -12,8 +12,11 @@ class Card:
     def __str__(self):
         return f"{self.rank} {self.suit}"
 
-    def can_play_on(self, other_card):
-        return self.rank == other_card.rank or self.suit == other_card.suit or self.rank == "J"
+    def can_play_on(self, current_card):
+        return self.rank == current_card.rank or self.suit == current_card.suit or self.rank == "J"
+
+    def card_to_dict(self):
+        return {"rank": self.rank, "suit": self.suit}
 
 
 class Deck:
