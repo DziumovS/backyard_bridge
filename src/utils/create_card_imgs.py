@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw, ImageFont
 suits = ["♠", "♥", "♦", "♣"]
 ranks = ["6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 
-card_width = 150
+card_width = 140
 card_height = 200
 corner_radius = 20
 
