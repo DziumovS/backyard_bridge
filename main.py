@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,7 +13,11 @@ app = FastAPI(
     title="Backyard bridge"
 )
 
-app.mount("/static/css", StaticFiles(directory="src/static/css"), name="css")
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent.absolute() / "src/static"),
+    name="static",
+)
 
 app.include_router(lobby_router)
 app.include_router(game_router)
@@ -35,9 +41,3 @@ app.add_middleware(
 @app.get("/", response_class=HTMLResponse)
 async def get(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
-
-
-# @app.on_event("startup")
-# async def startup_event():
-#     redis = aioredis.from_url("redis://localhost", encoding="utf8", decode_responses=True)
-#     FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
