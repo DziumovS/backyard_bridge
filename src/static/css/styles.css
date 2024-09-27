@@ -20,17 +20,39 @@ body {
     padding: 10px;
     box-sizing: border-box;
     overflow: hidden;
-    height: 300px;
+    height: 260px;
 }
 
 .card {
-    width: 140px;
-    height: 200px;
+    width: 120px;
+    height: 180px;
     position: absolute;
     transition: left 0.2s ease;
 }
 
 .card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#currentCards {
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    height: 180px;
+    margin: 1% 0;
+}
+
+.current-card {
+    width: 120px;
+    height: 180px;
+    margin: 0 100px;
+    position: relative;
+    bottom: 0;
+}
+
+.current-card img {
     width: 100%;
     height: 100%;
     object-fit: cover;

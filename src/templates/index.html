@@ -22,11 +22,19 @@
         <input id="lobbyInput" placeholder="Enter lobby ID" style="display: inline;" />
         <button id="joinLobbyButton" onclick="joinLobby()" disabled>Join Lobby</button>
         <div id="errorMessage" style="color: red;"></div>
+
         <div id="lobbyControls" style="display: none;">
             <h2 id="lobbyMessage"></h2>
             <button id="startButton" onclick="startGame()" style="display: none;" disabled>Start Game</button>
             <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
             <ul id="users"></ul>
+        </div>
+
+        <div id="currentCards" style="display: none;">
+            <div class="current-card" id="leftCard">
+                <img src="/static/cards/closed_card.png" alt="closed_card.png" />
+            </div>
+            <div class="current-card" id="rightCard"></div>
         </div>
 
         <footer>
@@ -52,6 +60,7 @@
                 lobbyControls: document.getElementById("lobbyControls"),
                 lobbyMessage: document.getElementById("lobbyMessage"),
                 usersList: document.getElementById("users"),
+                currentCards: document.getElementById("currentCards"),
             };
 
             elements.wsId.textContent = userName;
@@ -135,7 +144,8 @@
                         toggleStartButton(data.enable);
                         break;
                     case 'player_hand':
-                        updatePlayerHand(data.hand);
+                        updatePlayerHand(data.hand, data.playable_cards);
+                        updateCurrentCards(data.current_card);
                         break;
                 }
             }
@@ -162,6 +172,7 @@
                 };
 
                 elements.lobbyControls.style.display = "none";
+                elements.currentCards.style.display = "flex";
             }
 
             function leaveLobby() {
@@ -180,6 +191,7 @@
                 elements.joinLobbyButton.disabled = true;
                 elements.leaveLobbyButton.style.display = "none";
                 elements.errorMessage.style.display = "none";
+                elements.currentCards.style.display = "none";
             }
 
             function updateUsers(users, isHost) {
@@ -196,12 +208,12 @@
                 elements.startButton.disabled = !enable;
             }
 
-            function updatePlayerHand(hand) {
+            function updatePlayerHand(hand, playableCards) {
                 const playerHandDiv = document.getElementById("playerHand");
                 playerHandDiv.innerHTML = '';
 
                 const containerWidth = playerHandDiv.offsetWidth;
-                const cardWidth = 140;
+                const cardWidth = 120;
                 const gap = 5;
 
                 const totalCardsWidth = hand.length * (cardWidth + gap) - gap;
@@ -220,6 +232,14 @@
                     cardDiv.classList.add('card');
                     cardDiv.style.left = `${startLeftPosition + index * (cardWidth - overlap) + gap * index}px`;
 
+                    const isPlayable = playableCards.some(playableCard =>
+                        playableCard.rank === card.rank && playableCard.suit === card.suit
+                    );
+
+                    if (isPlayable) {
+                        cardDiv.style.bottom = '70px';
+                    }
+
                     const cardImage = document.createElement('img');
                     const cardName = `${card.rank}_${card.suit}`;
                     cardImage.src = `/static/cards/${cardName}.png`;
@@ -228,6 +248,18 @@
                     cardDiv.appendChild(cardImage);
                     playerHandDiv.appendChild(cardDiv);
                 });
+            }
+
+            function updateCurrentCards(currentCard) {
+                const rightCardDiv = document.getElementById("rightCard");
+
+                rightCardDiv.innerHTML = '';
+
+                const rightCardImage = document.createElement('img');
+                rightCardImage.src = `/static/cards/${currentCard.rank}_${currentCard.suit}.png`;
+                rightCardImage.alt = `${currentCard.rank}_${currentCard.suit}`;
+
+                rightCardDiv.appendChild(rightCardImage);
             }
         </script>
 
