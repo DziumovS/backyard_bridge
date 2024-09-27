@@ -28,15 +28,10 @@
             <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
             <ul id="users"></ul>
         </div>
-        <div id="player-hand-container" style="display: none;">
-            <h2>Your Hand:</h2>
-            <ul id="player-hand"></ul>
-        </div>
-        <div id="game" style="display: none;">
-            <input id="messageInput" placeholder="Enter your message" />
-            <button onclick="sendMessage()">Send</button>
-            <ul id="messages"></ul>
-        </div>
+
+        <footer>
+            <div id="playerHand"></div>
+        </footer>
 
         <script>
             let ws;
@@ -57,10 +52,6 @@
                 lobbyControls: document.getElementById("lobbyControls"),
                 lobbyMessage: document.getElementById("lobbyMessage"),
                 usersList: document.getElementById("users"),
-                gameSection: document.getElementById("game"),
-                messageInput: document.getElementById("messageInput"),
-                messages: document.getElementById("messages"),
-                hand_container: document.getElementById("player-hand-container")
             };
 
             elements.wsId.textContent = userName;
@@ -161,15 +152,16 @@
                 }
 
                 ws = new WebSocket(`ws://localhost:8000/ws/game/${lobbyId}/${userId}`);
+
                 ws.onmessage = function (event) {
-                    const message = document.createElement("li");
-                    message.textContent = event.data;
-                    elements.messages.appendChild(message);
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'player_hand') {
+                        handleWebSocketMessage(event);
+                    }
                 };
 
                 elements.lobbyControls.style.display = "none";
-                elements.gameSection.style.display = "block";
-                elements.hand_container.style.display = "block";
             }
 
             function leaveLobby() {
@@ -180,7 +172,6 @@
 
             function returnToMainPage() {
                 elements.lobbyControls.style.display = "none";
-                elements.gameSection.style.display = "none";
                 elements.createLobbyButton.style.display = 'inline';
                 elements.nameForm.style.display = "none";
                 elements.joinLobbyInput.style.display = 'inline';
@@ -189,15 +180,6 @@
                 elements.joinLobbyButton.disabled = true;
                 elements.leaveLobbyButton.style.display = "none";
                 elements.errorMessage.style.display = "none";
-            }
-
-            function sendMessage() {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(elements.messageInput.value);
-                    elements.messageInput.value = '';
-                } else {
-                    console.error("WebSocket is not open.");
-                }
             }
 
             function updateUsers(users, isHost) {
@@ -215,12 +197,36 @@
             }
 
             function updatePlayerHand(hand) {
-                const handList = document.getElementById("player-hand");
-                handList.innerHTML = '';
-                hand.forEach(card => {
-                    const cardElement = document.createElement("li");
-                    cardElement.textContent = `${card[0]} of ${card[1]}`;
-                    handList.appendChild(cardElement);
+                const playerHandDiv = document.getElementById("playerHand");
+                playerHandDiv.innerHTML = '';
+
+                const containerWidth = playerHandDiv.offsetWidth;
+                const cardWidth = 140;
+                const gap = 5;
+
+                const totalCardsWidth = hand.length * (cardWidth + gap) - gap;
+                let startLeftPosition = 0
+
+                let overlap = 0;
+                if (totalCardsWidth > containerWidth) {
+                    overlap = (totalCardsWidth - containerWidth) / (hand.length - 1);
+                    overlap = Math.min(overlap, cardWidth - gap);
+                } else {
+                    startLeftPosition += (containerWidth - totalCardsWidth + gap) / 2;
+                }
+
+                hand.forEach((card, index) => {
+                    const cardDiv = document.createElement('div');
+                    cardDiv.classList.add('card');
+                    cardDiv.style.left = `${startLeftPosition + index * (cardWidth - overlap) + gap * index}px`;
+
+                    const cardImage = document.createElement('img');
+                    const cardName = `${card.rank}_${card.suit}`;
+                    cardImage.src = `/static/cards/${cardName}.png`;
+                    cardImage.alt = cardName;
+
+                    cardDiv.appendChild(cardImage);
+                    playerHandDiv.appendChild(cardDiv);
                 });
             }
         </script>

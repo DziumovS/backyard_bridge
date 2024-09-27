@@ -1,0 +1,37 @@
+body {
+    background-color: #808080;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+#playerHand {
+    position: fixed;
+    bottom: 0;
+    width: 80%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    background-color: rgba(0, 0, 0, 0.8);
+    padding: 10px;
+    box-sizing: border-box;
+    overflow: hidden;
+    height: 300px;
+}
+
+.card {
+    width: 140px;
+    height: 200px;
+    position: absolute;
+    transition: left 0.2s ease;
+}
+
+.card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
