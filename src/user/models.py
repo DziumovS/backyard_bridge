@@ -16,16 +16,23 @@ class Player(User):
         self.hand = []
 
     def hand_to_dict(self) -> list:
-        return [{"rank": card.rank, "suit": card.suit} for card in self.hand]
+        return [card.card_to_dict() for card in self.hand]
 
     def draw_card(self, deck: Deck):
         self.hand.append(deck.draw_card())
 
     def play_card(self, card: Card, current_card: Card) -> bool:
-        if card.can_play_on(current_card):
+        if card.can_play_on(current_card=current_card):
             self.hand.remove(card)
             return True
         return False
+
+    def get_playable_cards(self, current_card: Card, to_dict: bool = False):
+        return [
+            card.card_to_dict() if to_dict else card
+            for card in self.hand
+            if card.can_play_on(current_card=current_card)
+        ]
 
     def has_won(self) -> bool:
         return len(self.hand) == 0
