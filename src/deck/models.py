@@ -23,6 +23,7 @@ class Deck:
     suits = ["♠", "♥", "♦", "♣"]
     ranks = ["6", "7", "8", "9", "10", "J", "Q", "K", "A"]
     special_cards = ["6", "7", "8", "J", "A"]
+    color_map = {"♠": "black", "♣": "black", "♥": "red", "♦": "red"}
 
     def __init__(self):
         self.deck = self.create_deck()
