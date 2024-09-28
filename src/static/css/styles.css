@@ -37,19 +37,46 @@ body {
 }
 
 #currentCards {
+    display: flex;
     justify-content: center;
     align-items: center;
-    position: relative;
-    height: 180px;
-    margin: 1% 0;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    max-width: 600px;
+    height: 200px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 20px;
+    box-sizing: border-box;
+    gap: 100px;
 }
 
 .current-card {
     width: 120px;
     height: 180px;
-    margin: 0 100px;
-    position: relative;
-    bottom: 0;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+}
+
+#cards-left {
+    text-align: center;
+}
+
+.deck-len {
+    margin: 0 0 0 0;
+    padding: 0;
+    font-weight: bold;
+    font-size: 20px;
+}
+
+.suite-symbol {
+    margin: 0 0 0 0;
+    padding: 0;
+    font-weight: bold;
+    font-size: 40px;
 }
 
 .current-card img {

@@ -31,10 +31,20 @@
         </div>
 
         <div id="currentCards" style="display: none;">
+
             <div class="current-card" id="leftCard">
                 <img src="/static/cards/closed_card.png" alt="closed_card.png" />
+                <div id="cards-left">
+                    <p>Cards left:</p>
+                    <p class="deck-len" id="cardsLeft"></p>
+                </div>
             </div>
-            <div class="current-card" id="rightCard"></div>
+
+            <div class="current-card" id="rightCard">
+                <div id="chosen-suite">
+                </div>
+            </div>
+
         </div>
 
         <footer>
@@ -92,7 +102,7 @@
 
             function createLobby() {
                 setLobbyUI(true);
-                initializeWebSocket('create_lobby', { user_name: userName });
+                initializeWebSocket('create_lobby', {user_name: userName});
             }
 
             async function joinLobby() {
@@ -104,7 +114,7 @@
 
                 if (data.exists) {
                     setLobbyUI(false);
-                    initializeWebSocket('join_lobby', { user_name: userName, lobby_id: inputLobbyId });
+                    initializeWebSocket('join_lobby', {user_name: userName, lobby_id: inputLobbyId});
                 } else {
                     showError("The lobby doesn't exist or no slots");
                 }
@@ -115,7 +125,7 @@
                     ws.close(1000);
                 }
                 ws = new WebSocket(`ws://localhost:8000/ws/lobby/${userId}`);
-                ws.onopen = () => ws.send(JSON.stringify({ type, ...message }));
+                ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
                 ws.onmessage = handleWebSocketMessage;
             }
 
@@ -144,8 +154,8 @@
                         toggleStartButton(data.enable);
                         break;
                     case 'player_hand':
-                        updatePlayerHand(data.hand, data.playable_cards);
-                        updateCurrentCards(data.current_card);
+                        updatePlayerHand(data.hand, data.current_player, data.playable_cards);
+                        updateCurrentCards(data.current_card, data.deck_len, data.chosen_suite);
                         break;
                 }
             }
@@ -158,7 +168,7 @@
 
             function startGame() {
                 if (isHost) {
-                    ws.send(JSON.stringify({ type: 'start_game' }));
+                    ws.send(JSON.stringify({type: 'start_game'}));
                 }
 
                 ws = new WebSocket(`ws://localhost:8000/ws/game/${lobbyId}/${userId}`);
@@ -176,7 +186,7 @@
             }
 
             function leaveLobby() {
-                ws.send(JSON.stringify({ type: 'close_lobby', lobby_id: lobbyId }));
+                ws.send(JSON.stringify({type: 'close_lobby', lobby_id: lobbyId}));
 
                 returnToMainPage();
             }
@@ -208,7 +218,7 @@
                 elements.startButton.disabled = !enable;
             }
 
-            function updatePlayerHand(hand, playableCards) {
+            function updatePlayerHand(hand, currentPlayer, playableCards) {
                 const playerHandDiv = document.getElementById("playerHand");
                 playerHandDiv.innerHTML = '';
 
@@ -236,7 +246,7 @@
                         playableCard.rank === card.rank && playableCard.suit === card.suit
                     );
 
-                    if (isPlayable) {
+                    if (currentPlayer.player_id === userId && isPlayable) {
                         cardDiv.style.bottom = '70px';
                     }
 
@@ -250,16 +260,36 @@
                 });
             }
 
-            function updateCurrentCards(currentCard) {
+            function updateCurrentCards(currentCard, deckLen, chosenSuite) {
+                const cardsLeftParagraph = document.getElementById('cardsLeft');
+                cardsLeftParagraph.textContent = `${deckLen}`;
+
                 const rightCardDiv = document.getElementById("rightCard");
 
-                rightCardDiv.innerHTML = '';
+                const oldImage = rightCardDiv.querySelector('img');
+                if (oldImage) {
+                    oldImage.remove();
+                }
 
                 const rightCardImage = document.createElement('img');
                 rightCardImage.src = `/static/cards/${currentCard.rank}_${currentCard.suit}.png`;
                 rightCardImage.alt = `${currentCard.rank}_${currentCard.suit}`;
 
                 rightCardDiv.appendChild(rightCardImage);
+
+                if (chosenSuite) {
+                    const chosenSuiteFirstParagraph = document.createElement('p');
+                    chosenSuiteFirstParagraph.textContent = `Chosen suit:`;
+                    chosenSuiteFirstParagraph.style.margin = '16px 0 0 0';
+                    const chosenSuiteSecondParagraph = document.createElement('p');
+                    chosenSuiteSecondParagraph.className = 'suite-symbol';
+                    chosenSuiteSecondParagraph.style.textAlign = 'center';
+                    chosenSuiteSecondParagraph.style.color = `${chosenSuite.color}`
+                    chosenSuiteSecondParagraph.textContent = `${chosenSuite.suit}`;
+
+                    rightCardDiv.appendChild(chosenSuiteFirstParagraph);
+                    rightCardDiv.appendChild(chosenSuiteSecondParagraph);
+                }
             }
         </script>
 
