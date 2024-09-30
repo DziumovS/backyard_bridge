@@ -247,6 +247,8 @@
 
                         if (currentPlayer.player_id === userId && isPlayable) {
                             cardDiv.style.bottom = '70px';
+
+                            cardDiv.onclick = () => playCard(card);
                         }
 
                         const cardImage = document.createElement('img');
@@ -302,6 +304,54 @@
                         rightCardDiv.appendChild(chosenSuiteFirstParagraph);
                         rightCardDiv.appendChild(chosenSuiteSecondParagraph);
                     }
+                }
+
+                function playCard(card) {
+                    const playerHandDiv = document.getElementById('playerHand');
+                    const rightCardDiv = document.getElementById('rightCard');
+
+                    const cardDiv = [...playerHandDiv.children].find(cardElement => {
+                        const img = cardElement.querySelector('img');
+                        return img.alt === `${card.rank}_${card.suit}`;
+                    });
+
+                    const startRect = cardDiv.getBoundingClientRect();
+                    const endRect = rightCardDiv.getBoundingClientRect();
+
+                    const cardClone = cardDiv.cloneNode(true);
+                    document.body.appendChild(cardClone);
+
+                    cardClone.style.position = 'absolute';
+                    cardClone.style.left = `${startRect.left}px`;
+                    cardClone.style.top = `${startRect.top}px`;
+                    cardClone.style.width = `${startRect.width}px`;
+                    cardClone.style.height = `${startRect.height}px`;
+                    cardClone.style.transition = 'all 0.5s ease';
+
+                    setTimeout(() => {
+                        cardClone.style.left = `${endRect.left}px`;
+                        cardClone.style.top = `${endRect.top}px`;
+                        cardClone.style.width = `${endRect.width}px`;
+                        cardClone.style.height = `${endRect.height}px`;
+                    }, 50);
+
+                    cardClone.addEventListener('transitionend', () => {
+                        cardClone.remove();
+
+                        const oldImage = rightCardDiv.querySelector('img');
+                        if (oldImage) oldImage.remove();
+
+                        const newCardImage = document.createElement('img');
+                        newCardImage.src = `/static/cards/${card.rank}_${card.suit}.png`;
+                        newCardImage.alt = `${card.rank}_${card.suit}`;
+
+                        rightCardDiv.appendChild(newCardImage);
+
+                        ws.send(JSON.stringify({
+                            type: 'play_card',
+                            card: card
+                        }));
+                    });
                 }
             </script>
         </div>
