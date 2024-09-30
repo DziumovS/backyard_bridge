@@ -7,12 +7,31 @@ body {
     height: 100vh;
 }
 
-#playerHand {
+footer {
+}
+
+footer p {
+}
+
+#playerContainer {
     position: fixed;
     bottom: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 20px;
+    height: 260px;
+}
+
+.turnText {
+    margin-top: -20px;
+    font-size: 35px;
+    color: white;
+}
+
+#playerHand {
     width: 80%;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
     justify-content: center;
     align-items: flex-end;
@@ -21,6 +40,8 @@ body {
     box-sizing: border-box;
     overflow: hidden;
     height: 260px;
+    position: fixed;
+    bottom: 0;
 }
 
 .card {
