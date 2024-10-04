@@ -43,7 +43,7 @@
                         <p class="deck-len" id="cardsLeft"></p>
                     </div>
                 </div>
-                <div class="current-card" id="rightCard">
+                <div class="current-card" id="rightCard" onclick="skip_turn()">
                     <div id="chosen-suite">
                     </div>
                 </div>
@@ -66,6 +66,7 @@
         let userId = Date.now().toString();
         let userName = userId;
         let isHost = false;
+        let currentPlayer = '';
 
 
         const elements = {
@@ -189,13 +190,13 @@
                     toggleStartButton(data.enable);
                     break;
 
-                case 'player_hand':
+                case 'game_data':
                     updatePlayerHand(data.hand, data.current_player, data.playable_cards);
                     updateCurrentCards(data.current_card, data.deck_len, data.chosen_suite);
                     break;
 
                 case 'whose_turn':
-                    whoseTurn(data.msg);
+                    whoseTurn(data.msg, data.current_player);
                     break;
             }
         }
@@ -308,8 +309,9 @@
         }
 
 
-        function whoseTurn(message) {
+        function whoseTurn(message, current_player) {
             elements.turnText.textContent = `${message}`;
+            currentPlayer = current_player;
         }
 
 
@@ -379,41 +381,48 @@
                 newCardImage.alt = `${card.rank}_${card.suit}`;
 
                 elements.rightCard.appendChild(newCardImage);
-
-                ws.send(JSON.stringify({type: 'played_card', card: card}));
             });
+            ws.send(JSON.stringify({type: 'played_card', card: card}));
         }
 
 
         function drawCard() {
-            const startRect = elements.leftCard.getBoundingClientRect();
-            const cardClone = elements.leftCard.querySelector('img').cloneNode(true);
+            if (currentPlayer === userId) {
+                const startRect = elements.leftCard.getBoundingClientRect();
+                const cardClone = elements.leftCard.querySelector('img').cloneNode(true);
 
-            document.body.appendChild(cardClone);
+                document.body.appendChild(cardClone);
 
-            cardClone.style.position = 'absolute';
-            cardClone.style.left = `${startRect.left}px`;
-            cardClone.style.top = `${startRect.top}px`;
-            cardClone.style.width = `${startRect.width}px`;
-            cardClone.style.height = `${startRect.height}px`;
-            cardClone.style.transition = 'all 0.5s ease';
-
-            setTimeout(() => {
-                const endRect = elements.playerHand.getBoundingClientRect();
-                const centerX = endRect.left + (endRect.width / 2) - (startRect.width / 2);
-                const centerY = endRect.bottom - startRect.height - 10;
-
-                cardClone.style.left = `${centerX}px`;
-                cardClone.style.top = `${centerY}px`;
+                cardClone.style.position = 'absolute';
+                cardClone.style.left = `${startRect.left}px`;
+                cardClone.style.top = `${startRect.top}px`;
                 cardClone.style.width = `${startRect.width}px`;
                 cardClone.style.height = `${startRect.height}px`;
-            }, 50);
+                cardClone.style.transition = 'all 0.5s ease';
 
-            cardClone.addEventListener('transitionend', () => {
-                cardClone.remove();
+                setTimeout(() => {
+                    const endRect = elements.playerHand.getBoundingClientRect();
+                    const centerX = endRect.left + (endRect.width / 2) - (startRect.width / 2);
+                    const centerY = endRect.bottom - startRect.height - 10;
+
+                    cardClone.style.left = `${centerX}px`;
+                    cardClone.style.top = `${centerY}px`;
+                    cardClone.style.width = `${startRect.width}px`;
+                    cardClone.style.height = `${startRect.height}px`;
+                }, 50);
+
+                cardClone.addEventListener('transitionend', () => {
+                    cardClone.remove();
+                });
 
                 ws.send(JSON.stringify({type: 'drew_card'}));
-            });
+            }
+        }
+
+        function skip_turn() {
+            if (currentPlayer === userId) {
+                ws.send(JSON.stringify({type: 'skip_turn'}));
+            }
         }
     </script>
 
