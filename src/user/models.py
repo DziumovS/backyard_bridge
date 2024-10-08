@@ -21,11 +21,9 @@ class Player(User):
     def draw_card(self, deck: Deck):
         self.hand.append(deck.draw_card())
 
-    def play_card(self, card: Card, current_card: Card) -> bool:
-        if card.can_play_on(current_card=current_card):
+    def play_card(self, card: Card, current_card: Card, chosen_suit: str) -> bool:
+        if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit):
             self.hand.remove(card)
-            return True
-        return False
 
     def get_playable_cards(self, current_card: Card, to_dict: bool = False):
         return [
