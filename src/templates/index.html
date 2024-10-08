@@ -16,6 +16,24 @@
 
         <div class="content">
             <h1>Backyard Bridge</h1>
+
+            <div id="popup" class="popup-window">
+                <div class="popup-grid">
+                    <div class="popup-cell-1" style="color: black;">
+                        <p>♠</p>
+                    </div>
+                    <div class="popup-cell-2" style="color: red;">
+                        <p>♥</p>
+                    </div>
+                    <div class="popup-cell-3" style="color: red;">
+                        <p>♦</p>
+                    </div>
+                    <div class="popup-cell-4" style="color: black;">
+                        <p>♣</p>
+                    </div>
+                </div>
+            </div>
+
             <p>Your name: <span id="ws-id"></span></p>
 
             <form id="nameForm" onsubmit="updateUsername(event)">
@@ -88,6 +106,7 @@
             cardsLeft: document.getElementById("cardsLeft"),
             rightCard: document.getElementById("rightCard"),
             leftCard: document.getElementById("leftCard"),
+            popUp: document.getElementById('popup'),
         };
 
 
@@ -390,7 +409,13 @@
 
                 elements.rightCard.appendChild(newCardImage);
             });
-            ws.send(JSON.stringify({type: 'played_card', card: card}));
+
+            if (card.rank === 'J') {
+                showPopup(card)
+            } else {
+                ws.send(JSON.stringify({type: 'played_card', card: card}));
+            }
+
         }
 
 
@@ -445,10 +470,31 @@
             }
         }
 
-        function firstTurn(currentCard) {
+        function firstTurn(card) {
             if (currentPlayer === userId) {
-                ws.send(JSON.stringify({type: 'played_card', card: currentCard}));
+                if (card.rank === 'J') {
+                    showPopup(card)
+                } else {
+                    ws.send(JSON.stringify({type: 'played_card', card: card}));
+                }
             }
+        }
+
+        function showPopup(card) {
+            elements.popUp.style.display = 'block';
+
+            const suits = ['♠', '♥', '♦', '♣'];
+            const cells = document.querySelectorAll('.popup-grid div');
+
+            cells.forEach((cell, index) => {
+                cell.addEventListener('click', function() {
+                    const selectedSuit = suits[index];
+
+                    elements.popUp.style.display = 'none';
+
+                    ws.send(JSON.stringify({ type: 'played_card', card: card, chosen_suit: selectedSuit }));
+                });
+            });
         }
     </script>
 
