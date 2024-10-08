@@ -21,7 +21,7 @@ class Player(User):
     def draw_card(self, deck: Deck):
         self.hand.append(deck.draw_card())
 
-    def play_card(self, card: Card, current_card: Card, chosen_suit: str) -> bool:
+    def play_card(self, card: Card, current_card: Card, chosen_suit: str | None = None) -> bool:
         if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit):
             self.hand.remove(card)
 
