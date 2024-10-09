@@ -20,10 +20,12 @@ try:
     font_little = ImageFont.truetype(font_path, 20)
     font_small = ImageFont.truetype(font_path, 28)
     font_large = ImageFont.truetype(font_path, 80)
+    font_huge = ImageFont.truetype(font_path, 120)
 except IOError:
     font_little = ImageFont.load_default()
     font_small = ImageFont.load_default()
     font_large = ImageFont.load_default()
+    font_huge = ImageFont.load_default()
 
 
 def create_rounded_rectangle(size, radius, fill):
@@ -34,7 +36,29 @@ def create_rounded_rectangle(size, radius, fill):
     return rectangle
 
 
-def create_card(rank, suit):
+def create_closed_card():
+    closed_card_img = Image.new("RGBA", (card_width, card_height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(closed_card_img)
+    draw.rounded_rectangle(
+        [-1, 0, card_width, card_height],
+        corner_radius + border_width,
+        fill=border_color
+    )
+
+    closed_card_background = create_rounded_rectangle(
+        (card_width - border_width * 2, card_height - border_width * 2),
+        corner_radius,
+        fill=(251, 186, 0)
+    )
+    closed_card_img.paste(closed_card_background, (border_width, border_width), closed_card_background)
+
+    draw.text((5 + border_width, card_height / 3 + border_width), "Mebelka's", font=font_little, fill="black")
+    draw.text((7 + border_width, card_height / 2 + border_width), "BRIDGE", font=font_small, fill="black")
+
+    closed_card_img.save(f"{path_to_save}closed_card.png")
+
+
+def create_playing_card(rank, suit):
     card_img = Image.new("RGBA", (card_width, card_height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(card_img)
 
@@ -57,7 +81,7 @@ def create_card(rank, suit):
     suit_width = suit_bbox[2] - suit_bbox[0]
     draw.text((5 + (rank_width - suit_width) / 2, 35), suit, font=font_small, fill=color)
 
-    draw.text((card_width // 2 - 25, card_height // 2 - 40), suit, font=font_large, fill=color)
+    draw.text((card_width // 2 - 25, card_height // 2 - 47), suit, font=font_large, fill=color)
 
     draw.text((card_width - rank_width - 5, card_height - 40), rank, font=font_small, fill=color)
 
@@ -69,27 +93,33 @@ def create_card(rank, suit):
 
 for suit in suits:
     for rank in ranks:
-        card_img = create_card(rank, suit)
+        card_img = create_playing_card(rank, suit)
         file_name = f"{rank}_{suit}.png"
         card_img.save(f"{path_to_save}{file_name}")
 
 
-closed_card_img = Image.new("RGBA", (card_width, card_height), (255, 255, 255, 0))
-draw = ImageDraw.Draw(closed_card_img)
-draw.rounded_rectangle(
-    [-1, 0, card_width, card_height],
-    corner_radius + border_width,
-    fill=border_color
-)
+def create_plugs_cards(suit):
+    card_img = Image.new("RGBA", (card_width, card_height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(card_img)
 
-closed_card_background = create_rounded_rectangle(
-    (card_width - border_width * 2, card_height - border_width * 2),
-    corner_radius,
-    fill=(251, 186, 0)
-)
-closed_card_img.paste(closed_card_background, (border_width, border_width), closed_card_background)
+    draw.rounded_rectangle(
+        [-1, 0, card_width, card_height],
+        corner_radius + border_width,
+        fill=border_color
+    )
 
-draw.text((5 + border_width, card_height / 3 + border_width), "Mebelka's", font=font_little, fill="black")
-draw.text((7 + border_width, card_height / 2 + border_width), "BRIDGE", font=font_small, fill="black")
+    card_background = create_rounded_rectangle((card_width - border_width * 2, card_height - border_width * 2),
+                                               corner_radius, "white")
+    card_img.paste(card_background, (border_width, border_width), card_background)
 
-closed_card_img.save(f"{path_to_save}closed_card.png")
+    color = color_map[suit]
+
+    draw.text((card_width // 2 - 36, card_height // 2 - 65), suit, font=font_huge, fill=color)
+
+    return card_img
+
+
+for suit in suits:
+    card_img = create_plugs_cards(suit)
+    file_name = f"{suit}.png"
+    card_img.save(f"{path_to_save}{file_name}")
