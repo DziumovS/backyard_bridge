@@ -1,3 +1,5 @@
+from typing import Dict
+
 from fastapi import WebSocket
 
 from src.deck.models import Deck, Card
@@ -18,6 +20,11 @@ class Player(User):
     def hand_to_dict(self) -> list:
         return [card.card_to_dict() for card in self.hand]
 
+    def dict_to_card(self, card: Dict) -> Card:
+        for card_in_hand in self.hand:
+            if card_in_hand.rank == card["rank"] and card_in_hand.suit == card["suit"]:
+                return card_in_hand
+
     def draw_card(self, deck: Deck):
         self.hand.append(deck.draw_card())
 
@@ -25,11 +32,11 @@ class Player(User):
         if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit):
             self.hand.remove(card)
 
-    def get_playable_cards(self, current_card: Card, to_dict: bool = False):
+    def get_playable_cards(self, current_card: Card, chosen_suit: str | None, to_dict: bool = False):
         return [
             card.card_to_dict() if to_dict else card
             for card in self.hand
-            if card.can_play_on(current_card=current_card)
+            if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit)
         ]
 
     def has_won(self) -> bool:
