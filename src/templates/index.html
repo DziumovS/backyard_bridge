@@ -61,10 +61,7 @@
                         <p class="deck-len" id="cardsLeft"></p>
                     </div>
                 </div>
-                <div class="current-card" id="rightCard" onclick="skip_turn()">
-                    <div id="chosen-suit">
-                    </div>
-                </div>
+                <div class="current-card" id="rightCard" onclick="skip_turn()"></div>
             </div>
 
         </div>
@@ -323,6 +320,7 @@
                 if (currentPlayer && isPlayable) {
                     cardDiv.style.bottom = '70px';
                     cardDiv.onclick = () => playCard(card);
+                    cardDiv.style.cursor = 'pointer';
                 }
 
                 const cardImage = document.createElement('img');
@@ -349,25 +347,15 @@
             if (oldImage) oldImage.remove();
 
             const rightCardImage = document.createElement('img');
-            rightCardImage.src = `/static/cards/${currentCard.rank}_${currentCard.suit}.png`;
-            rightCardImage.alt = `${currentCard.rank}_${currentCard.suit}`;
+            if (chosenSuit) {
+                rightCardImage.src = `/static/cards/${chosenSuit.suit}.png`;
+                rightCardImage.alt = `${chosenSuit.suit}`;
+            } else {
+                rightCardImage.src = `/static/cards/${currentCard.rank}_${currentCard.suit}.png`;
+                rightCardImage.alt = `${currentCard.rank}_${currentCard.suit}`;
+            }
 
             elements.rightCard.appendChild(rightCardImage);
-
-            if (chosenSuit) {
-                const chosenSuitFirstParagraph = document.createElement('p');
-                chosenSuitFirstParagraph.textContent = `Chosen suit:`;
-                chosenSuitFirstParagraph.style.margin = '16px 0 0 0';
-
-                const chosenSuitSecondParagraph = document.createElement('p');
-                chosenSuitSecondParagraph.className = 'suit-symbol';
-                chosenSuitSecondParagraph.style.textAlign = 'center';
-                chosenSuitSecondParagraph.style.color = `${chosenSuit.color}`
-                chosenSuitSecondParagraph.textContent = `${chosenSuit.suit}`;
-
-                elements.rightCard.appendChild(chosenSuitFirstParagraph);
-                elements.rightCard.appendChild(chosenSuitSecondParagraph);
-            }
         }
 
 
@@ -413,9 +401,9 @@
             if (card.rank === 'J') {
                 showPopup(card)
             } else {
-                ws.send(JSON.stringify({type: 'played_card', card: card}));
+                ws.send(JSON.stringify({type: 'played_card', card: card, chosen_suit: null }));
             }
-
+            cardDiv.style.display = 'none';
         }
 
 
@@ -473,21 +461,32 @@
         function firstTurn(card) {
             if (currentPlayer === userId) {
                 if (card.rank === 'J') {
+                    console.log('firstTurn')
                     showPopup(card)
                 } else {
-                    ws.send(JSON.stringify({type: 'played_card', card: card}));
+                    ws.send(JSON.stringify({type: 'played_card', card: card, chosen_suit: null }));
                 }
             }
         }
 
-        function showPopup(card) {
+        async function showPopup(card) {
             elements.popUp.style.display = 'block';
+
+            const playerCards = elements.playerHand.querySelectorAll('.card');
+            playerCards.forEach(cardDiv => {
+                cardDiv.onclick = null;
+                cardDiv.style.cursor = 'default';
+                cardDiv.style.bottom = '0';
+            });
 
             const suits = ['♠', '♥', '♦', '♣'];
             const cells = document.querySelectorAll('.popup-grid div');
 
             cells.forEach((cell, index) => {
-                cell.addEventListener('click', function() {
+                let newCell = cell.cloneNode(true);
+                cell.replaceWith(newCell);
+
+                newCell.addEventListener('click', function() {
                     const selectedSuit = suits[index];
 
                     elements.popUp.style.display = 'none';
