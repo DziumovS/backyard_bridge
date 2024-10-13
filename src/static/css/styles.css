@@ -114,7 +114,7 @@ footer p {
 }
 
 .highlighted-card-img {
-    box-shadow: 0 0 30px 20px rgba(255, 165, 0, 0.7);
+    box-shadow: 0 0 10px 5px rgba(255, 165, 0, 0.7);
     border-radius: 20px;
 }
 
