@@ -208,15 +208,11 @@
 
                 case 'game_data':
                     updatePlayerHand(data.hand, data.current_player, data.playable_cards);
-                    updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit);
+                    updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit, data.player_options);
                     break;
 
                 case 'whose_turn':
                     whoseTurn(data.msg, data.current_player);
-                    break;
-
-                case 'skip_turn':
-                    colorSkipTurn();
                     break;
 
                 case 'first_turn':
@@ -290,7 +286,7 @@
         }
 
 
-        function updatePlayerHand(hand, currentPlayer, playableCards) {
+        function updatePlayerHand(hand, Player, playableCards) {
             elements.playerHand.innerHTML = '';
 
             const containerWidth = elements.playerHand.offsetWidth;
@@ -317,7 +313,7 @@
                     playableCard.rank === card.rank && playableCard.suit === card.suit
                 );
 
-                if (currentPlayer && isPlayable) {
+                if (Player && isPlayable) {
                     cardDiv.style.bottom = '70px';
                     cardDiv.onclick = () => playCard(card);
                     cardDiv.style.cursor = 'pointer';
@@ -340,26 +336,27 @@
         }
 
 
-        function updateCurrentCards(currentCard, deckLen, chosenSuit) {
+        function updateCurrentCards(currentCard, deckLen, chosenSuit, playerOptions) {
             elements.cardsLeft.textContent = `${deckLen}`;
 
             const oldImage = elements.rightCard.querySelector('img');
             if (oldImage) oldImage.remove();
 
-            const rightCardImage = document.createElement('img');
+            const newRightCardImage = document.createElement('img');
             if (chosenSuit) {
-                rightCardImage.src = `/static/cards/${chosenSuit.suit}.png`;
-                rightCardImage.alt = `${chosenSuit.suit}`;
+                newRightCardImage.src = `/static/cards/${chosenSuit.suit}.png`;
+                newRightCardImage.alt = `${chosenSuit.suit}`;
             } else {
-                rightCardImage.src = `/static/cards/${currentCard.rank}_${currentCard.suit}.png`;
-                rightCardImage.alt = `${currentCard.rank}_${currentCard.suit}`;
+                newRightCardImage.src = `/static/cards/${currentCard.rank}_${currentCard.suit}.png`;
+                newRightCardImage.alt = `${currentCard.rank}_${currentCard.suit}`;
             }
 
-            elements.rightCard.appendChild(rightCardImage);
+            elements.rightCard.appendChild(newRightCardImage);
+            checkCurrentPlayerOptions(playerOptions)
         }
 
 
-        function playCard(card) {
+        async function playCard(card) {
             const cardDiv = [...elements.playerHand.children].find(cardElement => {
                 const img = cardElement.querySelector('img');
                 return img.alt === `${card.rank}_${card.suit}`;
@@ -379,31 +376,34 @@
             cardClone.style.transition = 'all 0.5s ease';
 
             setTimeout(() => {
+                cardDiv.style.display = 'none';
                 cardClone.style.left = `${endRect.left}px`;
                 cardClone.style.top = `${endRect.top}px`;
                 cardClone.style.width = `${endRect.width}px`;
                 cardClone.style.height = `${endRect.height}px`;
             }, 50);
 
-            cardClone.addEventListener('transitionend', () => {
-                cardClone.remove();
-
-                const oldImage = elements.rightCard.querySelector('img');
-                if (oldImage) oldImage.remove();
-
-                const newCardImage = document.createElement('img');
-                newCardImage.src = `/static/cards/${card.rank}_${card.suit}.png`;
-                newCardImage.alt = `${card.rank}_${card.suit}`;
-
-                elements.rightCard.appendChild(newCardImage);
+            await new Promise((resolve) => {
+                cardClone.addEventListener('transitionend', () => {
+                    cardClone.remove();
+                    resolve();
+                });
             });
 
+            const oldImage = elements.rightCard.querySelector('img');
+            if (oldImage) oldImage.remove();
+
+            const newCardImage = document.createElement('img');
+            newCardImage.src = `/static/cards/${card.rank}_${card.suit}.png`;
+            newCardImage.alt = `${card.rank}_${card.suit}`;
+
+            elements.rightCard.appendChild(newCardImage);
+
             if (card.rank === 'J') {
-                showPopup(card)
+                showPopup(card);
             } else {
-                ws.send(JSON.stringify({type: 'played_card', card: card, chosen_suit: null }));
+                ws.send(JSON.stringify({ type: 'played_card', card: card, chosen_suit: null }));
             }
-            cardDiv.style.display = 'none';
         }
 
 
@@ -441,27 +441,28 @@
         }
 
         function skip_turn() {
-            const rightCardImage = document.querySelector('#rightCard img');
-
             if (currentPlayer === userId) {
                 ws.send(JSON.stringify({type: 'skip_turn'}));
             }
-
-            rightCardImage.classList.remove('highlighted-card-img');
         }
 
         function colorSkipTurn() {
             const rightCardImage = document.querySelector('#rightCard img');
-
             if (currentPlayer === userId) {
                 rightCardImage.classList.add('highlighted-card-img');
+            }
+        }
+
+        function colorDrawCard() {
+            const leftCardImage = document.querySelector('#leftCard img');
+            if (currentPlayer === userId) {
+                leftCardImage.classList.add('highlighted-card-img');
             }
         }
 
         function firstTurn(card) {
             if (currentPlayer === userId) {
                 if (card.rank === 'J') {
-                    console.log('firstTurn')
                     showPopup(card)
                 } else {
                     ws.send(JSON.stringify({type: 'played_card', card: card, chosen_suit: null }));
@@ -469,7 +470,7 @@
             }
         }
 
-        async function showPopup(card) {
+        function showPopup(card) {
             elements.popUp.style.display = 'block';
 
             const playerCards = elements.playerHand.querySelectorAll('.card');
@@ -494,6 +495,53 @@
                     ws.send(JSON.stringify({ type: 'played_card', card: card, chosen_suit: selectedSuit }));
                 });
             });
+        }
+
+
+        function checkCurrentPlayerOptions(playerOptions) {
+            setDefaultDrawCard();
+            setDefaultSkipTurn();
+
+            if (currentPlayer === userId) {
+                if (playerOptions.must_draw) {
+                    colorDrawCard();
+                    elements.leftCard.style.cursor = 'pointer';
+                    elements.leftCard.onclick = drawCard;
+                } else if (playerOptions.must_skip) {
+                    colorSkipTurn();
+                    elements.rightCard.style.cursor = 'pointer';
+                    elements.rightCard.onclick = skip_turn;
+                } else {
+                    if (playerOptions.can_draw) {
+                        elements.leftCard.style.cursor = 'pointer';
+                        elements.leftCard.onclick = drawCard;
+                    }
+                    if (playerOptions.can_skip) {
+                        elements.rightCard.style.cursor = 'pointer';
+                        elements.rightCard.onclick = skip_turn;
+                    }
+                }
+            }
+        }
+
+
+        function setDefaultDrawCard() {
+            const leftCardImage = document.querySelector('#leftCard img');
+            if (currentPlayer === userId && leftCardImage) {
+                leftCardImage.classList.remove('highlighted-card-img');
+            }
+            elements.leftCard.style.cursor = 'default';
+            elements.leftCard.onclick = null;
+        }
+
+
+        function setDefaultSkipTurn() {
+            const rightCardImage = document.querySelector('#rightCard img');
+            if (currentPlayer === userId && rightCardImage) {
+                rightCardImage.classList.remove('highlighted-card-img');
+            }
+            elements.rightCard.style.cursor = 'default';
+            elements.rightCard.onclick = null;
         }
     </script>
 
