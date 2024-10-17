@@ -50,11 +50,14 @@ class GameManager:
         )
 
     async def send_game_data(self, player: Player, current_player: bool, game: Game,
-                             to_dict: bool = True, playable_cards: bool = True):
-        if playable_cards:
-            playable_cards = player.get_playable_cards(current_card=game.current_card, to_dict=to_dict)
-        else:
+                             chosen_suit: str | None = None, to_dict: bool = True, playable_cards: bool = True):
+
+        if player.options.must_draw or player.options.must_skip or not playable_cards:
             playable_cards = ()
+        else:
+            playable_cards = player.get_playable_cards(current_card=game.current_card,
+                                                       chosen_suit=chosen_suit,
+                                                       to_dict=to_dict)
 
         await self.connection_manager.send_message(
             websocket=player.websocket,
@@ -66,5 +69,6 @@ class GameManager:
                 "current_player": current_player,
                 "chosen_suit": game.chosen_suit,
                 "current_card": game.current_card_to_dict(),
+                "player_options": player.options_to_dict()
             }
         )
