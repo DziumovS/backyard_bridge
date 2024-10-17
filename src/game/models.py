@@ -25,10 +25,9 @@ class Game:
         self.current_card = self.card_distribution()
 
     def card_distribution(self) -> Card:
-        current_player_hand = self.players[self.current_player_index].hand
-        played_card = current_player_hand.pop()
-        self.deck.insert_to_bounce_deck(played_card=played_card)
-        return played_card
+        random.shuffle(self.get_current_player().hand)
+        self.current_card = self.get_current_player().hand[0]
+        return self.current_card
 
     def current_card_to_dict(self) -> Dict:
         return self.current_card.card_to_dict()
@@ -58,137 +57,94 @@ class Game:
                 "player_hand": player.hand
             } for player in self.players]
 
+    def is_current_player(self, player_id: str) -> bool:
+        current_player = self.players[self.current_player_index]
+        return current_player.user_id == player_id
+
+    def get_current_player(self) -> Player:
+        return self.players[self.current_player_index]
+
+    def get_next_player(self) -> Player:
+        return self.players[(self.current_player_index + 1) % len(self.players)]
+
     def get_players_websocket(self) -> List[WebSocket]:
         return [player.websocket for player in self.players]
 
     def next_player(self):
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
 
+    def remove_played_card(self, current_player: Player, card: Card):
+        current_player.hand.remove(card)
+        self.deck.insert_to_bounce_deck(played_card=card)
+
     def end_game(self):
         self.is_active = False
         print(f"Game {self.game_id} has ended.")
 
-    def play(self):
-        while self.is_active:
-            player = self.players[self.current_player_index]
-            print(f"\n{player.user_name}'s turn. Current card: {self.current_card}")
-            print(f"Hand: {', '.join(str(card) for card in player.hand)}")
+    def handle_card_six(self, current_player: Player):
+        playable_cards = current_player.get_playable_cards(
+            current_card=self.current_card,
+            chosen_suit=self.chosen_suit,
+        )
+        if playable_cards:
+            current_player.options.can_skip = False
+            current_player.options.can_draw = True
+        else:
+            current_player.options.must_draw += 1
 
-            if self.first_move:
-                self.first_turn(player=player)
-            else:
-                self.player_turn(player=player)
+    def _handle_card_six(self, current_player: Player, card: Card):
+        self.remove_played_card(current_player=current_player, card=card)
 
-            if player.has_won():
-                print(f"{player.user_name} has won the game!")
-                self.end_game()
-                break
+        self.handle_card_six(current_player=current_player)
 
-            self.next_player()
+    def _handle_card_seven(self, current_player: Player, card: Card):
+        self.remove_played_card(current_player=current_player, card=card)
+        current_player.options.must_skip = True
 
-    def player_turn(self, player: Player):
-        playable_cards = player.get_playable_cards(current_card=self.current_card)
-        if not playable_cards:
-            print(f"{player.user_name} has no playable cards, drawing a card.")
-            player.draw_card(self.deck)
-            print(f"Hand: {', '.join(str(card) for card in player.hand)}")
-            playable_cards = player.get_playable_cards(current_card=self.current_card)
-            if not playable_cards:
-                print(f"{player.user_name} still has no playable cards. Next player turn.")
-                return
+        next_player = self.get_next_player()
+        next_player.set_default_options()
+        next_player.options.must_draw += 1
 
-        print("Playable cards:")
-        for i, card in enumerate(playable_cards):
-            print(f"{i + 1}: {card}")
+    def _handle_card_eight(self, current_player: Player, card: Card):
+        self.remove_played_card(current_player=current_player, card=card)
+        current_player.options.must_skip = True
 
-        choice = int(input("Choose a card to play (enter the number): ")) - 1  #######
-        chosen_card = playable_cards[choice]  #######
-        player.play_card(chosen_card, self.current_card)
-        self.current_card = chosen_card
-        self.deck.insert_to_bounce_deck(chosen_card)
+        next_player = self.get_next_player()
+        next_player.set_default_options()
+        next_player.options.must_draw += 2
+        next_player.options.must_skip = True
 
-        self.handle_special_cards(player=player)
+    def _handle_card_jack(self, current_player: Player, card: Card):
+        self.remove_played_card(current_player=current_player, card=card)
+        current_player.options.must_skip = True
 
-    def first_turn(self, player: Player):
-        print("It's first_turn function!")
-        if self.first_move:
-            self.first_move = False
+        next_player = self.get_next_player()
+        next_player.set_default_options()
 
-            if self.current_card.rank in self.deck.special_cards:
-                self.handle_special_cards(player=player)
-                return
+    def _handle_card_ace(self, current_player: Player, card: Card):
+        self.remove_played_card(current_player=current_player, card=card)
+        current_player.options.must_skip = True
 
-            # playable_cards = [card for card in player.hand if card.can_play_on(other_card=self.current_card)]
-            # if not playable_cards:
-            #     print(f"{player.user_name} has no playable cards.")
-            #     return
-            #
-            # else:
-            #     print("Playable cards:")
-            #     for i, card in enumerate(playable_cards):
-            #         print(f"{i + 1}: {card}")
-            #
-            #     choice = int(input("Choose a card to play (enter the number): ")) - 1  #######
-            #     chosen_card = playable_cards[choice]  #######
-            #     player.play_card(chosen_card, self.current_card)
-            #     self.current_card = chosen_card
-            #     self.deck.insert_to_bounce_deck(chosen_card)
-            #     return
+        next_player = self.get_next_player()
+        next_player.set_default_options()
+        next_player.options.must_skip = True
 
-    def _handle_card_six(self, player: Player):
-        while True:
-            print(f"Current card: {self.current_card}")
-            playable_cards = player.get_playable_cards(current_card=self.current_card)
-            if not playable_cards:
-                player.draw_card(self.deck)
-            else:
-                print("Playable cards:")
-                for i, card in enumerate(playable_cards):
-                    print(f"{i + 1}: {card}")
+    def _handle_normal_card(self, current_player: Player, card: Card):
+        self.remove_played_card(current_player=current_player, card=card)
+        current_player.set_default_options()
+        current_player.options.must_skip = True
 
-                choice = int(input("Choose a card to play (enter the number): ")) - 1  #######
-                chosen_card = playable_cards[choice]  #######
-                player.play_card(chosen_card, self.current_card)
-                self.current_card = chosen_card
-                self.deck.insert_to_bounce_deck(chosen_card)
-            # self.next_player()
-            break
-
-    def _handle_card_seven(self):
-        self.next_player()
-        self.players[self.current_player_index].draw_card(self.deck)
-
-    def _handle_card_eight(self):
-        self.next_player()
-        player = self.players[self.current_player_index]
-        print(f"\n{player.user_name} skip his turn.")
-        self.players[self.current_player_index].draw_card(self.deck)
-        self.players[self.current_player_index].draw_card(self.deck)
-
-    def _handle_card_jack(self):
-        print("You played a Jack! Choose a suit:")
-        for i, suit in enumerate(self.deck.suits):
-            print(f"{i + 1}: {suit}")
-
-        choice = int(input("Choose a suit (enter the number): ")) - 1
-
-        self.chosen_suit = self.deck.suits[choice]
-        print(f"The chosen suit is now {self.chosen_suit}")
-
-    def _handle_card_ace(self):
-        self.next_player()
-        player = self.players[self.current_player_index]
-        print(f"\n{player.user_name} skip his turn.")
-
-    def handle_special_cards(self, player: Player):
+    def handle_special_cards(self, current_player: Player, card: Card):
         match self.current_card.rank:
             case "6":
-                self._handle_card_six(player=player)
+                self._handle_card_six(current_player=current_player, card=card)
             case "7":
-                self._handle_card_seven()
+                self._handle_card_seven(current_player=current_player, card=card)
             case "8":
-                self._handle_card_eight()
+                self._handle_card_eight(current_player=current_player, card=card)
             case "J":
-                self._handle_card_jack()
+                self._handle_card_jack(current_player=current_player, card=card)
             case "A":
-                self._handle_card_ace()
+                self._handle_card_ace(current_player=current_player, card=card)
+            case _:
+                self._handle_normal_card(current_player=current_player, card=card)
