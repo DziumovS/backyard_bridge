@@ -25,6 +25,7 @@ class Player(User):
     def __init__(self, user_id: str, websocket: WebSocket, user_name: str):
         super().__init__(user_id, websocket, user_name)
         self.hand: List = []
+        self.scores: int = 0
         self.options: PlayerOptions = PlayerOptions()
 
     def set_default_options(self):
@@ -49,20 +50,21 @@ class Player(User):
     def draw_card(self, deck: Deck):
         self.hand.append(deck.draw_card())
 
-    def play_card(self, card: Card, current_card: Card, chosen_suit: str | None = None) -> bool:
+    def play_card(self, card: Card, current_card: Card, chosen_suit: dict | None = None) -> bool:
         if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit):
             self.hand.remove(card)
 
     def get_playable_cards(
             self,
             current_card: Card,
-            chosen_suit: str | None,
-            to_dict: bool = False
+            chosen_suit: dict | None = None,
+            to_dict: bool = False,
+            j: bool = False
     ) -> List[Dict | Card]:
         return [
             card.card_to_dict() if to_dict else card
             for card in self.hand
-            if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit)
+            if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit, j=j)
         ]
 
     def has_won(self) -> bool:

@@ -59,7 +59,8 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
                     chosen_suit = data["chosen_suit"]
                     game.chosen_suit = {
                         "suit": chosen_suit,
-                        "color": game.deck.color_map[chosen_suit]
+                        "color": game.deck.color_map[chosen_suit],
+                        "chooser_id": current_player.user_id
                     } if chosen_suit else None
 
                     game.handle_special_cards(current_player=current_player, card=card)

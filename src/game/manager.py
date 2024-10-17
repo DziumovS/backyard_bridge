@@ -50,18 +50,19 @@ class GameManager:
         )
 
     async def send_game_data(self, player: Player, current_player: bool, game: Game,
-                             chosen_suit: str | None = None, playable_cards: bool = True):
+                             chosen_suit: dict | None = None, playable_cards: bool = True):
 
         if player.options.must_draw or player.options.must_skip or not playable_cards:
             playable_cards = ()
         else:
-            playable_cards = player.get_playable_cards(
-                current_card=game.current_card,
-                chosen_suit=chosen_suit,
-                to_dict=True
-            )
-            if game.current_card.rank == "J":
-                playable_cards = [card for card in playable_cards if card['rank'] == "J"]
+            if game.current_card.rank == "J" and game.chosen_suit["chooser_id"] == player.user_id:
+                playable_cards = player.get_playable_cards(current_card=game.current_card, j=True)
+            else:
+                playable_cards = player.get_playable_cards(
+                    current_card=game.current_card,
+                    chosen_suit=chosen_suit,
+                    to_dict=True
+                )
 
         await self.connection_manager.send_message(
             websocket=player.websocket,

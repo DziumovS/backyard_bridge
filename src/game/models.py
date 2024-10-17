@@ -1,11 +1,27 @@
 import random
 from typing import List, Optional, Dict
+from dataclasses import dataclass
 
 from fastapi import WebSocket
 
 from src.connection.manager import ConnectionManager
 from src.user.models import Player
 from src.deck.models import Card, Deck
+
+
+@dataclass
+class FourOfAKindTracker:
+    current_rank: str = None
+    count: int = 0
+
+    def checking(self, card_rank: str) -> bool:
+        if card_rank != self.current_rank:
+            self.current_rank = card_rank
+            self.count = 1
+        else:
+            self.count += 1
+
+        return self.count == 4
 
 
 class Game:
@@ -17,12 +33,19 @@ class Game:
         self.first_move = True
         self.current_player_index = 0
         self.chosen_suit = None
+        self.four_of_a_kind_tracker: FourOfAKindTracker = FourOfAKindTracker()
 
         for player in self.players:
             for _ in range(5):
                 player.draw_card(self.deck)
 
         self.current_card = self.card_distribution()
+
+    def is_four_of_a_kind(self, card: Card) -> bool:
+        return self.four_of_a_kind_tracker.checking(card.rank)
+
+    def is_it_bridge(self, card: Card) -> bool:
+        return self.four_of_a_kind_tracker.checking(card.rank)
 
     def card_distribution(self) -> Card:
         random.shuffle(self.get_current_player().hand)
@@ -118,6 +141,9 @@ class Game:
         self.remove_played_card(current_player=current_player, card=card)
         current_player.options.can_draw = False
         current_player.options.can_skip = True
+
+        if not current_player.get_playable_cards(current_card=self.current_card, j=True):
+            current_player.options.must_skip = True
 
         next_player = self.get_next_player()
         next_player.set_default_options()

@@ -12,9 +12,11 @@ class Card:
     def __str__(self):
         return f"{self.rank} {self.suit}"
 
-    def can_play_on(self, current_card, chosen_suit: str | None = None):
+    def can_play_on(self, current_card, chosen_suit: dict | None = None, j: bool = False):
         if chosen_suit:
             return self.suit == chosen_suit["suit"] or self.rank == "J"
+        if j:
+            return self.rank == "J"
         return self.rank == current_card.rank or self.suit == current_card.suit or self.rank == "J"
 
     def card_to_dict(self):
