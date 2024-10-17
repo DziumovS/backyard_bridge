@@ -116,7 +116,8 @@ class Game:
 
     def _handle_card_jack(self, current_player: Player, card: Card):
         self.remove_played_card(current_player=current_player, card=card)
-        current_player.options.must_skip = True
+        current_player.options.can_draw = False
+        current_player.options.can_skip = True
 
         next_player = self.get_next_player()
         next_player.set_default_options()
