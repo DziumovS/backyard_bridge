@@ -4,7 +4,6 @@ from typing import List
 
 
 class Card:
-
     def __init__(self, rank: str, suit: str):
         self.rank = rank
         self.suit = suit
