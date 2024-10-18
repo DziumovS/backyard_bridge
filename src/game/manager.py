@@ -56,7 +56,7 @@ class GameManager:
             playable_cards = ()
         else:
             if game.current_card.rank == "J" and game.chosen_suit["chooser_id"] == player.user_id:
-                playable_cards = player.get_playable_cards(current_card=game.current_card, j=True)
+                playable_cards = player.get_playable_cards(current_card=game.current_card, to_dict=True, j=True)
             else:
                 playable_cards = player.get_playable_cards(
                     current_card=game.current_card,
@@ -74,6 +74,8 @@ class GameManager:
                 "current_player": current_player,
                 "chosen_suit": game.chosen_suit,
                 "current_card": game.current_card_to_dict(),
-                "player_options": player.options_to_dict()
+                "player_options": player.options_to_dict(),
+
+                "scores_rate": game.deck.scores_rate  # do it!
             }
         )
