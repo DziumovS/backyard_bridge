@@ -34,12 +34,35 @@ class Game:
         self.current_player_index = 0
         self.chosen_suit = None
         self.four_of_a_kind_tracker: FourOfAKindTracker = FourOfAKindTracker()
+        self.last_cards_j = {}
 
         for player in self.players:
             for _ in range(5):
                 player.draw_card(self.deck)
 
         self.current_card = self.card_distribution()
+
+    def calculate_scores(self):
+        points_mapping = {
+            "10": 10,
+            "Q": 10,
+            "K": 10,
+            "A": 15
+        }
+
+        for player in self.players:
+            points = 0
+            only_jacks = all(card.rank == "J" for card in player.hand)
+
+            points_mapping["J"] = 20 if only_jacks else 10
+
+            for card in player.hand:
+                if card.rank in points_mapping:
+                    points += points_mapping[card.rank]
+
+            player.scores += (points * self.deck.scores_rate)
+            if player.user_id in self.last_cards_j:
+                player.scores -= ((self.last_cards_j[player.user_id] * 20) * self.deck.scores_rate)
 
     def is_four_of_a_kind(self, card: Card) -> bool:
         return self.four_of_a_kind_tracker.checking(card.rank)
@@ -141,6 +164,11 @@ class Game:
         self.remove_played_card(current_player=current_player, card=card)
         current_player.options.can_draw = False
         current_player.options.can_skip = True
+
+        if current_player.user_id not in self.last_cards_j:
+            self.last_cards_j[current_player.user_id] = 1
+        else:
+            self.last_cards_j[current_player.user_id] += 1
 
         if not current_player.get_playable_cards(current_card=self.current_card, j=True):
             current_player.options.must_skip = True
