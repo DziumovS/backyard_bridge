@@ -15,61 +15,110 @@
         </header>
 
         <div class="content">
+
             <h1>Backyard Bridge</h1>
+
+            <p class="name-container">
+                Your name:
+                <span id="ws-id" class="hidden"></span>
+                <form id="nameForm" onsubmit="updateUsername(event)" class="name-form">
+                    <input type="text" id="nameInput" placeholder="Enter your name" maxlength="20" class="name-input" />
+
+                    <button id="changeName" type="submit">Change name</button>
+
+                </form>
+            </p>
+
+            <button id="rulesButton" onclick="showRules()" style="display: block;">Rules</button>
+
+            <p id="usersHeader">Active players:</p>
+            <ul id="users"></ul>
+
+            <div class="preLobbyControls">
+
+                <div class="joinLobbyControls">
+                    <input type="text" id="lobbyInput" placeholder="Enter lobby ID" />
+                    <button id="joinLobbyButton" onclick="joinLobby()" disabled>Join Lobby</button>
+                </div>
+
+                <div class="errorMessage">
+                    <div id="errorMessage"></div>
+                </div>
+
+                <button id="createLobbyButton" onclick="createLobby()">Create Lobby</button>
+
+                <div id="lobbyControls" style="display: none;">
+
+                    <h2 id="lobbyMessage"></h2>
+
+                    <div class="buttonContainer">
+                        <button id="startButton" onclick="startGame()" style="display: none;" disabled>Start Game</button>
+
+                        <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div id="currentCards" style="display: none;">
+
+                <div class="current-card" id="leftCard" onclick="drawCard()">
+                    <img src="/static/cards/closed_card.png" alt="closed_card.png" />
+
+                    <div id="cards-left">
+                        <p>Cards left:</p>
+                        <p class="deck-len" id="cardsLeft"></p>
+                    </div>
+
+                </div>
+
+                <div class="current-card" id="rightCard" onclick="skip_turn()"></div>
+
+            </div>
 
             <div id="popup" class="popup-window">
                 <div class="popup-grid">
-                    <div class="popup-cell-1" style="color: black;">
+                    <div class="popup-cell-1">
                         <p>♠</p>
                     </div>
-                    <div class="popup-cell-2" style="color: red;">
+                    <div class="popup-cell-2">
                         <p>♥</p>
                     </div>
-                    <div class="popup-cell-3" style="color: red;">
+                    <div class="popup-cell-3">
                         <p>♦</p>
                     </div>
-                    <div class="popup-cell-4" style="color: black;">
+                    <div class="popup-cell-4">
                         <p>♣</p>
                     </div>
                 </div>
             </div>
 
-            <p>Your name: <span id="ws-id"></span></p>
-
-            <form id="nameForm" onsubmit="updateUsername(event)">
-                <input type="text" id="nameInput" placeholder="Enter your name" maxlength="20" />
-                <button type="submit">OK</button>
-            </form>
-
-            <button id="createLobbyButton" onclick="createLobby()">Create Lobby</button>
-            <input id="lobbyInput" placeholder="Enter lobby ID" style="display: inline;" />
-            <button id="joinLobbyButton" onclick="joinLobby()" disabled>Join Lobby</button>
-            <div id="errorMessage" style="color: red;"></div>
-
-            <div id="lobbyControls" style="display: none;">
-                <h2 id="lobbyMessage"></h2>
-                <button id="startButton" onclick="startGame()" style="display: none;" disabled>Start Game</button>
-                <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
-                <ul id="users"></ul>
-            </div>
-
-            <div id="currentCards" style="display: none;">
-                <div class="current-card" id="leftCard" onclick="drawCard()">
-                    <img src="/static/cards/closed_card.png" alt="closed_card.png" />
-                    <div id="cards-left">
-                        <p>Cards left:</p>
-                        <p class="deck-len" id="cardsLeft"></p>
+            <div id="rules-widget" class="rules-widget-window" style="display: none;">
+                <div class="rules-widget-content">
+                    <div class="rules-widget-header">
+                        <span id="closeRulesWidget" class="close-rules-widget">&times;</span>
+                    </div>
+                    <div class="rules-widget-grid">
+                        <div class="rules-column rules-column-en">
+                            <p></p>
+                        </div>
+                        <div class="rules-column rules-column-ru">
+                            <p></p>
+                        </div>
                     </div>
                 </div>
-                <div class="current-card" id="rightCard" onclick="skip_turn()"></div>
             </div>
 
         </div>
 
         <footer>
             <div id="playerContainer">
+
                 <p class="turnText" id="turnText"></p>
+
                 <div id="playerHand"></div>
+
             </div>
         </footer>
 
@@ -82,6 +131,7 @@
         let userName = userId;
         let isHost = false;
         let currentPlayer = '';
+        let eventHandlersAdded = false;
 
 
         const elements = {
@@ -95,6 +145,7 @@
             errorMessage: document.getElementById("errorMessage"),
             lobbyControls: document.getElementById("lobbyControls"),
             lobbyMessage: document.getElementById("lobbyMessage"),
+            usersHeader: document.getElementById("usersHeader"),
             usersList: document.getElementById("users"),
             currentCards: document.getElementById("currentCards"),
             nameInput: document.getElementById("nameInput"),
@@ -104,10 +155,12 @@
             rightCard: document.getElementById("rightCard"),
             leftCard: document.getElementById("leftCard"),
             popUp: document.getElementById('popup'),
+            rulesWidget: document.getElementById('rules-widget'),
         };
 
 
         elements.wsId.textContent = userName;
+        elements.nameInput.placeholder = userName;
 
 
         elements.joinLobbyInput.addEventListener('input', function () {
@@ -124,11 +177,13 @@
                 userName = newName;
                 elements.wsId.textContent = userName;
                 elements.nameForm.style.display = "none";
+                elements.wsId.style.display = "block";
             }
         }
 
 
         function setLobbyUI(isHostView) {
+            elements.wsId.style.display = "block";
             elements.createLobbyButton.style.display = 'none';
             elements.nameForm.style.display = "none";
             elements.joinLobbyInput.style.display = 'none';
@@ -181,12 +236,12 @@
             switch (data.type) {
                 case 'lobby_created':
                     lobbyId = data.lobby_id;
-                    elements.lobbyMessage.textContent = `You created lobby with ID: ${lobbyId}`;
+                    elements.lobbyMessage.textContent = `You have created a lobby with ID: ${lobbyId}`;
                     break;
 
                 case 'joined_lobby':
                     lobbyId = data.lobby_id;
-                    elements.lobbyMessage.textContent = `You entered lobby with ID: ${lobbyId}`;
+                    elements.lobbyMessage.textContent = `You have joined the lobby with ID: ${lobbyId}`;
                     updateUsers(data.users, false);
                     break;
 
@@ -265,11 +320,15 @@
             elements.leaveLobbyButton.style.display = "none";
             elements.errorMessage.style.display = "none";
             elements.currentCards.style.display = "none";
+            elements.usersHeader.style.display = 'none';
+            elements.usersList.style.display = 'none';
         }
 
 
         function updateUsers(users, isHost) {
+            elements.usersList.style.display = 'block';
             elements.usersList.innerHTML = '';
+            elements.usersHeader.style.display = 'block';
 
             users.forEach(user => {
                 const userElement = document.createElement("li");
@@ -440,11 +499,13 @@
             }
         }
 
+
         function skip_turn() {
             if (currentPlayer === userId) {
                 ws.send(JSON.stringify({type: 'skip_turn'}));
             }
         }
+
 
         function colorSkipTurn() {
             const rightCardImage = document.querySelector('#rightCard img');
@@ -453,12 +514,14 @@
             }
         }
 
+
         function colorDrawCard() {
             const leftCardImage = document.querySelector('#leftCard img');
             if (currentPlayer === userId) {
                 leftCardImage.classList.add('highlighted-card-img');
             }
         }
+
 
         function firstTurn(card) {
             if (currentPlayer === userId) {
@@ -469,6 +532,7 @@
                 }
             }
         }
+
 
         function showPopup(card) {
             elements.popUp.style.display = 'block';
@@ -542,6 +606,40 @@
             }
             elements.rightCard.style.cursor = 'default';
             elements.rightCard.onclick = null;
+        }
+
+
+        async function showRules() {
+            const response = await fetch('/rules');
+            const data = await response.json();
+
+            document.querySelector('.rules-column-ru p').innerHTML = data.rules_ru;
+            document.querySelector('.rules-column-en p').innerHTML = data.rules_en;
+
+            elements.rulesWidget.style.display = 'flex';
+
+            if (!eventHandlersAdded) {
+                document.getElementById('closeRulesWidget').addEventListener('click', closeRulesWidget);
+                document.getElementById('rules-widget').addEventListener('click', function(event) {
+                    if (event.target === elements.rulesWidget) {
+                        closeRulesWidget();
+                    }
+                });
+                document.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape') {
+                        closeRulesWidget();
+                    }
+                });
+
+                eventHandlersAdded = true;
+            }
+        }
+
+
+        function closeRulesWidget() {
+            elements.rulesWidget.style.display = 'none';
+            document.querySelector('.rules-column-ru p').textContent = '';
+            document.querySelector('.rules-column-en p').textContent = '';
         }
     </script>
 
