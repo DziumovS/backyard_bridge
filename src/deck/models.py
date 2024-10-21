@@ -49,8 +49,9 @@ class Deck:
             self.flip()
         return self.deck.pop()
 
-    def insert_to_bounce_deck(self, played_card: Card):
-        self.bounce_deck.insert(0, played_card)
+    def insert_to_bounce_deck(self, previous_card: Card):
+        if previous_card:
+            self.bounce_deck.insert(0, previous_card)
 
     def flip(self):
         self.deck = self.bounce_deck
