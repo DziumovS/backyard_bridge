@@ -119,13 +119,13 @@ class Game:
     def next_player(self):
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
 
-    def remove_played_card(self, current_player: Player, card: Card):
-        current_player.hand.remove(card)
-        self.deck.insert_to_bounce_deck(played_card=card)
-
     def end_game(self):
         self.is_active = False
         print(f"Game {self.game_id} has ended.")
+
+    def remove_played_card(self, current_player: Player, card: Card | None):
+        current_player.hand.remove(self.current_card)
+        self.deck.insert_to_bounce_deck(previous_card=card)
 
     def handle_card_six(self, current_player: Player):
         playable_cards = current_player.get_playable_cards(
