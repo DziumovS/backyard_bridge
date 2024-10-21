@@ -275,7 +275,6 @@ button:active {
 }
 
 .turnText {
-    margin-top: -20px;
     font-size: 35px;
     color: white;
 }
@@ -286,17 +285,17 @@ button:active {
     justify-content: center;
     align-items: flex-end;
     background-color: rgba(0, 0, 0, 0.8);
-    padding: 10px;
+    padding: 10px 0 50px 0;
     box-sizing: border-box;
     overflow: hidden;
-    height: 260px;
+    height: 235px;
     position: fixed;
     bottom: 0;
 }
 
 .card {
-    width: 120px;
-    height: 180px;
+    width: 90px;
+    height: 135px;
     position: absolute;
     transition: left 0.2s ease, bottom 0.2s ease;
 }
@@ -323,8 +322,8 @@ button:active {
     left: 50%;
     transform: translate(-50%, -50%);
     width: 100%;
-    max-width: 600px;
-    height: 200px;
+    max-width: 330px;
+    height: 150px;
     background-color: rgba(0, 0, 0, 0.5);
     padding: 20px;
     box-sizing: border-box;
@@ -332,8 +331,8 @@ button:active {
 }
 
 .current-card {
-    width: 120px;
-    height: 180px;
+    width: 90px;
+    height: 135px;
     display: flex;
     align-items: center;
     flex-direction: column;
@@ -366,7 +365,7 @@ button:active {
 
 .highlighted-card-img {
     box-shadow: 0 0 10px 5px rgba(255, 165, 0, 0.7);
-    border-radius: 20px;
+    border-radius: 15px;
 }
 
 .popup-window {
