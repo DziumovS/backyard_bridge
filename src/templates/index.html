@@ -18,6 +18,8 @@
 
             <h1>Backyard Bridge</h1>
 
+            <button id="rulesButton" onclick="showRules()" style="display: block;">Rules</button>
+
             <p class="name-container">
                 Your name:
                 <span id="ws-id" class="hidden"></span>
@@ -28,8 +30,6 @@
 
                 </form>
             </p>
-
-            <button id="rulesButton" onclick="showRules()" style="display: block;">Rules</button>
 
             <p id="usersHeader">Active players:</p>
             <ul id="users"></ul>
@@ -349,7 +349,7 @@
             elements.playerHand.innerHTML = '';
 
             const containerWidth = elements.playerHand.offsetWidth;
-            const cardWidth = 120;
+            const cardWidth = 90;
             const gap = 5;
 
             const totalCardsWidth = hand.length * (cardWidth + gap) - gap;
@@ -373,7 +373,7 @@
                 );
 
                 if (Player && isPlayable) {
-                    cardDiv.style.bottom = '70px';
+                    cardDiv.style.bottom = '90px';
                     cardDiv.onclick = () => playCard(card);
                     cardDiv.style.cursor = 'pointer';
                 }
