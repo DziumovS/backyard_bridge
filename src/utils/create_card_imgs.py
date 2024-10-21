@@ -3,9 +3,9 @@ from PIL import Image, ImageDraw, ImageFont
 suits = ["♠", "♥", "♦", "♣"]
 ranks = ["6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 
-card_width = 120
-card_height = 180
-corner_radius = 20
+card_width = 90
+card_height = 135
+corner_radius = 15
 border_color = "black"
 border_width = 1
 
@@ -14,13 +14,14 @@ color_map = {"♠": "black", "♣": "black", "♥": "red", "♦": "red"}
 
 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
+
 path_to_save = "../static/cards/"
 
 try:
-    font_little = ImageFont.truetype(font_path, 20)
-    font_small = ImageFont.truetype(font_path, 28)
-    font_large = ImageFont.truetype(font_path, 80)
-    font_huge = ImageFont.truetype(font_path, 120)
+    font_little = ImageFont.truetype(font_path, 15)
+    font_small = ImageFont.truetype(font_path, 24)
+    font_large = ImageFont.truetype(font_path, 70)
+    font_huge = ImageFont.truetype(font_path, 110)
 except IOError:
     font_little = ImageFont.load_default()
     font_small = ImageFont.load_default()
@@ -52,10 +53,13 @@ def create_closed_card():
     )
     closed_card_img.paste(closed_card_background, (border_width, border_width), closed_card_background)
 
-    draw.text((5 + border_width, card_height / 3 + border_width), "Mebelka's", font=font_little, fill="black")
-    draw.text((7 + border_width, card_height / 2 + border_width), "BRIDGE", font=font_small, fill="black")
+    draw.text((4 + border_width, card_height / 3.5 + border_width), "Mebelka's", font=font_little, fill="black")
+    draw.text((0.3 + border_width, card_height / 2.5 + border_width), "BRIDGE", font=font_small, fill="black")
 
     closed_card_img.save(f"{path_to_save}closed_card.png")
+
+
+create_closed_card()
 
 
 def create_playing_card(rank, suit):
@@ -75,18 +79,18 @@ def create_playing_card(rank, suit):
 
     rank_bbox = draw.textbbox((0, 0), rank, font=font_small)
     rank_width = rank_bbox[2] - rank_bbox[0]
-    draw.text((5, 5), rank, font=font_small, fill=color)
+    draw.text((4, 4), rank, font=font_small, fill=color)
 
     suit_bbox = draw.textbbox((0, 0), suit, font=font_small)
     suit_width = suit_bbox[2] - suit_bbox[0]
-    draw.text((5 + (rank_width - suit_width) / 2, 35), suit, font=font_small, fill=color)
+    draw.text((4 + (rank_width - suit_width) / 2, 25), suit, font=font_small, fill=color)
 
-    draw.text((card_width // 2 - 25, card_height // 2 - 47), suit, font=font_large, fill=color)
+    draw.text((card_width // 2 - 21, card_height // 2 - 39), suit, font=font_large, fill=color)
 
-    draw.text((card_width - rank_width - 5, card_height - 40), rank, font=font_small, fill=color)
+    draw.text((card_width - rank_width - 4, card_height - 31), rank, font=font_small, fill=color)
 
-    suit_x = card_width - suit_width - 5
-    draw.text((suit_x - (rank_width - suit_width) / 2, card_height - 70), suit, font=font_small, fill=color)
+    suit_x = card_width - suit_width - 4
+    draw.text((suit_x - (rank_width - suit_width) / 2, card_height - 52), suit, font=font_small, fill=color)
 
     return card_img
 
@@ -114,7 +118,7 @@ def create_plugs_cards(suit):
 
     color = color_map[suit]
 
-    draw.text((card_width // 2 - 36, card_height // 2 - 65), suit, font=font_huge, fill=color)
+    draw.text((card_width // 2 - 33, card_height // 2 - 62), suit, font=font_huge, fill=color)
 
     return card_img
 
