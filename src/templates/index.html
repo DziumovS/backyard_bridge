@@ -262,6 +262,7 @@
                     break;
 
                 case 'game_data':
+                    console.log(data)
                     updatePlayerHand(data.hand, data.current_player, data.playable_cards);
                     updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit, data.player_options);
                     break;
@@ -373,6 +374,7 @@
                 );
 
                 if (Player && isPlayable) {
+                    cardDiv.classList.add('highlighted-card-img');
                     cardDiv.style.bottom = '90px';
                     cardDiv.onclick = () => playCard(card);
                     cardDiv.style.cursor = 'pointer';
