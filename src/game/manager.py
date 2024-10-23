@@ -55,7 +55,7 @@ class GameManager:
         if player.options.must_draw or player.options.must_skip or not playable_cards:
             playable_cards = ()
         else:
-            if game.current_card.rank == "J" and game.chosen_suit["chooser_id"] == player.user_id:
+            if game.current_card.rank == "J" and game.chosen_suit and game.chosen_suit["chooser_id"] == player.user_id:
                 playable_cards = player.get_playable_cards(current_card=game.current_card, to_dict=True, j=True)
             else:
                 playable_cards = player.get_playable_cards(
