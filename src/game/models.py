@@ -42,6 +42,9 @@ class Game:
 
         self.current_card = self.card_distribution()
 
+    def __del__(self):
+        print(f"Game {self.game_id} has been deleted.")
+
     def calculate_scores(self):
         points_mapping = {
             "10": 10,
@@ -81,10 +84,6 @@ class Game:
     def shuffle_players(self, players: List[Player]) -> List[Player]:
         random.shuffle(players)
         return players
-
-    def remove_game(self, game_id: str):
-        if game_id in self.games:
-            del self.games[game_id]
 
     def get_player_or_none(self, user_id: str) -> Optional[Player]:
         for player in self.players:
