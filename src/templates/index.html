@@ -26,7 +26,7 @@
                 <form id="nameForm" onsubmit="updateUsername(event)" class="name-form">
                     <input type="text" id="nameInput" placeholder="Enter your name" maxlength="20" class="name-input" />
 
-                    <button id="changeName" type="submit">Change name</button>
+                    <button id="changeName" type="submit" disabled>Change name</button>
 
                 </form>
             </p>
@@ -165,6 +165,11 @@
 
         elements.joinLobbyInput.addEventListener('input', function () {
             elements.joinLobbyButton.disabled = !elements.joinLobbyInput.value.trim();
+        });
+
+        elements.nameInput.addEventListener('input', function () {
+            const inputText = elements.nameInput.value.trim();
+            document.getElementById('changeName').disabled = inputText.length === 0;
         });
 
 

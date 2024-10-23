@@ -22,7 +22,7 @@ p {
 .name-container {
     display: inline-flex;
     align-items: center;
-    margin: 0 0 5px 5px;
+    margin: 6px 0 6px 5px;
     outline: none;
     font-size: 16px;
 }
@@ -163,7 +163,7 @@ button:active {
     margin-top: 10px;
 }
 
-#startButton:disabled, #joinLobbyButton:disabled {
+#startButton:disabled, #joinLobbyButton:disabled, #changeName:disabled {
     pointer-events: none;
     opacity: 0.5;
     cursor: not-allowed;
