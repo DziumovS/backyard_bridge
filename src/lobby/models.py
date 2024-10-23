@@ -12,6 +12,9 @@ class Lobby:
         self.in_game = False
         self.users: Dict[str, User] = {host.user_id: host}
 
+    def __del__(self):
+        print("Lobby has been deleted.")
+
     def is_host(self, user_id: str) -> bool:
         return self.host.user_id == user_id
 
