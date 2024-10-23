@@ -43,7 +43,7 @@ class Game:
         self.current_card = self.card_distribution()
 
     def __del__(self):
-        print(f"Game {self.game_id} has been deleted.")
+        print(f"Game '{self.game_id}' has been deleted.")
 
     def calculate_scores(self):
         points_mapping = {
