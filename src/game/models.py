@@ -67,9 +67,6 @@ class Game:
             if player.user_id in self.last_cards_j:
                 player.scores -= ((self.last_cards_j[player.user_id] * 20) * self.deck.scores_rate)
 
-    def is_four_of_a_kind(self, card: Card) -> bool:
-        return self.four_of_a_kind_tracker.checking(card.rank)
-
     def is_it_bridge(self, card: Card) -> bool:
         return self.four_of_a_kind_tracker.checking(card.rank)
 
