@@ -79,3 +79,56 @@ class GameManager:
                 "scores_rate": game.deck.scores_rate  # do it!
             }
         )
+
+    async def handle_disconnect_game(self, player_id: str, error: bool = False):
+        game = self.get_game_by_player_id(player_id=player_id)
+        if game:
+            left_player = game.get_player_or_none(user_id=player_id)
+            game.remove_player(user_id=player_id)
+
+            while left_player.hand:
+                game.deck.bounce_deck.append(left_player.hand.pop())
+
+            if player_id == game.get_current_player().user_id:
+                game.next_player()
+
+            next_player = game.get_current_player()
+
+            for player in game.players:
+                is_current_player = player.user_id == next_player.user_id
+                pre_message = f"Player {left_player.user_name} has left the game. "
+                message = "It's your turn!" if is_current_player else f"It's {next_player.user_name}'s turn!"
+
+                await self.send_whose_turn(
+                    websocket=player.websocket,
+                    message=f"{pre_message}{message}",
+                    user_id=next_player.user_id
+                )
+
+                await self.send_game_data(
+                    player=player,
+                    current_player=is_current_player,
+                    game=game,
+                    chosen_suit=game.chosen_suit
+                )
+
+                await self.connection_manager.disconnect(websocket=left_player.websocket, error=error)
+
+            if len(game.players) <= 1:
+                game.is_active = False
+                message = (
+                    f"With {left_player.user_name} gone, there aren't enough players left in the game to keep it going."
+                )
+
+                await self.connection_manager.broadcast(
+                    websockets=game.get_players_websocket(),
+                    message={
+                        "type": "not_enough_players",
+                        "msg": message
+                    }
+                )
+
+                for player in game.players:
+                    await self.connection_manager.disconnect(websocket=player.websocket)
+
+                self.remove_game(game.game_id)
