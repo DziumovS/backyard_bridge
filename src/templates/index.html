@@ -217,7 +217,7 @@
                 setLobbyUI(false);
                 initializeWebSocket('join_lobby', {user_name: userName, lobby_id: inputLobbyId});
             } else {
-                showError("The lobby doesn't exist or no slots");
+                await showError("The lobby doesn't exist or no slots", 2);
             }
         }
 
@@ -279,15 +279,32 @@
                 case 'first_turn':
                     firstTurn(data.current_card);
                     break;
+
+                case 'not_enough_players':
+                    backToHomePage(data.msg);
+                    break;
+
+                case 'show_error':
+                    showError(data.msg, 5)
+                    break
             }
         }
 
 
-        function showError(message) {
+        function showError(message, seconds) {
+            const previousZIndex = elements.errorMessage.style.zIndex;
+
             elements.errorMessage.textContent = message;
             elements.errorMessage.style.display = "block";
+            elements.errorMessage.style.zIndex = "1001";
 
-            setTimeout(() => elements.errorMessage.style.display = "none", 2000);
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    elements.errorMessage.style.display = "none";
+                    elements.errorMessage.style.zIndex = previousZIndex;
+                    resolve();
+                }, seconds * 1000);
+            });
         }
 
 
@@ -647,6 +664,12 @@
             elements.rulesWidget.style.display = 'none';
             document.querySelector('.rules-column-ru p').textContent = '';
             document.querySelector('.rules-column-en p').textContent = '';
+        }
+
+
+        async function backToHomePage(message) {
+            await showError(message, 5);
+            window.location.href = 'http://localhost:8000';
         }
     </script>
 
