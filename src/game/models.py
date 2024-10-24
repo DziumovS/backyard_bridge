@@ -94,10 +94,10 @@ class Game:
     def get_players(self) -> List[Dict]:
         return [
             {
-                "player_id": player.user_id,
-                "player_name": player.user_name,
-                "player_hand": player.hand
-            } for player in self.players]
+                "user_id": player.user_id,
+                "user_name": player.user_name
+            } for player in self.players
+        ]
 
     def is_current_player(self, player_id: str) -> bool:
         current_player = self.players[self.current_player_index]
