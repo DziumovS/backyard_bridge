@@ -23,7 +23,7 @@ p {
 .name-container {
     display: inline-flex;
     align-items: center;
-    margin: 6px 0 6px 5px;
+    margin: 6px 0 0 5px;
     outline: none;
     font-size: 16px;
 }
@@ -252,6 +252,10 @@ button:active {
 .rules-widget-content::-webkit-scrollbar-thumb {
     background-color: #ccc;
     border-radius: 4px;
+}
+
+#scoresRate {
+    margin-left: 5px;
 }
 
 #usersHeader {
