@@ -41,9 +41,11 @@ class LobbyManager:
         lobby = Lobby(lobby_id=lobby_id, host=user)
         self.lobbies[lobby_id] = lobby
 
+        message = f"You have created a lobby with ID: <b>{lobby_id}</b>"
+
         await self.connection_manager.send_message(
             websocket=websocket,
-            message={"type": "lobby_created", "lobby_id": lobby_id}
+            message={"type": "lobby_created", "lobby_id": lobby_id, "msg": message}
         )
         await self.connection_manager.send_message(
             websocket=websocket,
@@ -55,9 +57,10 @@ class LobbyManager:
         lobby = self.get_lobby(lobby_id)
         if lobby:
             lobby.add_user(user)
+            message = f"You have joined the lobby with ID: <b>{lobby_id}</b>"
             await self.connection_manager.send_message(
                 websocket=websocket,
-                message={"type": "joined_lobby", "lobby_id": lobby_id, "users": lobby.get_users()}
+                message={"type": "joined_lobby", "lobby_id": lobby_id, "users": lobby.get_users(), "msg": message}
             )
             await self.connection_manager.broadcast(
                 websockets=lobby.get_users_websocket(),
