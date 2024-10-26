@@ -24,7 +24,8 @@ game_manager = GameManager(connection_manager)
 async def check_lobby(lobby_id: str):
     lobby = lobby_manager.lobbies.get(lobby_id)
     exists = lobby is not None and len(lobby.users) < 4
-    return JSONResponse(content={"exists": exists})
+    message = "The lobby doesn't exist or no slots."
+    return JSONResponse(content={"exists": exists, "msg": message})
 
 
 @router.get("/rules")
