@@ -62,5 +62,18 @@ class Player(User):
             if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit, j=j)
         ]
 
+    def prepare_playable_cards(self, game, chosen_suit: dict | None = None, playable_cards: bool = True):
+        if self.options.must_draw or self.options.must_skip or not playable_cards:
+            return ()
+        else:
+            if game.current_card.rank == "J" and game.chosen_suit and game.chosen_suit["chooser_id"] == self.user_id:
+                return self.get_playable_cards(current_card=game.current_card, to_dict=True, j=True)
+            else:
+                return self.get_playable_cards(
+                    current_card=game.current_card,
+                    chosen_suit=chosen_suit,
+                    to_dict=True
+                )
+
     def has_won(self) -> bool:
         return len(self.hand) == 0
