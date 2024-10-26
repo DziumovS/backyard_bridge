@@ -1,6 +1,6 @@
 rules_ru = """
 <b>КОЛИЧЕСТВО ИГРОКОВ</b><br>
-2 — 4<br>
+2 - 4<br>
 <br>
 <br>
 
@@ -13,7 +13,7 @@ rules_ru = """
 <b>5) На карту</b> можно класть либо карту того же номинала ("дама" на "даму"), либо карту той же масти ("трефы" на "трефы"), либо валет.<br>
 <b>6) Валет</b> можно класть на карту любого номинала и масти, и в любом количестве.<br>
 <b>7) Раннее окончание игры</b> возможно в двух сценариях:<br>
-  &nbsp;&nbsp;• если будет сыграно подряд 4 карты одинакового номинала - в этом случае игрок, который сыграл 4-ю карту <b>может</b> нажать "бридж";<br>
+  &nbsp;&nbsp;• если будет сыграно подряд 4 карты одинакового номинала - в этом случае игрок, который сыграл 4-ю карту <b>может</b> нажать "бридж" (исключение - карта с номиналом 6);<br>
   &nbsp;&nbsp;• если игрок обязан взять карту из колоды, но в колоде недостаточно карт.<br>
 В этих случаях всем игрокам будут зачтены все очки из их рук.<br>
 <b>8) Рейт очков</b>, которые будут получены по окончанию партии, увеличивается на +1 с каждым переворотом колоды.<br>
@@ -50,7 +50,7 @@ rules_ru = """
 
 rules_en = """
 <b>NUMBER OF PLAYERS</b><br>
-2 — 4<br>
+2 - 4<br>
 <br>
 <br>
 
@@ -63,7 +63,7 @@ rules_en = """
 <b>5) You can</b> play a card if it has the same rank (e.g., Queen on Queen), the same suit (e.g., Clubs on Clubs), or if it's a Jack.<br>
 <b>6) A Jack</b> can be played on any rank or suit and in any quantity.<br>
 <b>7) The game</b> can end early in two scenarios:<br>
-  &nbsp;&nbsp;• If 4 cards of the same rank are played consecutively, the player who played the 4th card <b>can</b> call "Bridge."<br>
+  &nbsp;&nbsp;• If 4 cards of the same rank are played consecutively, the player who played the 4th card <b>can</b> call "Bridge" (exception - a card with a value of 6);<br>
   &nbsp;&nbsp;• If a player must draw a card from the deck, but there aren't enough cards in the deck.<br>
 In these cases, all players will be given points based on their cards in their hands.<br>
 <b>8) The point multiplier</b> increases by +1 with each reshuffle of the deck.<br>
