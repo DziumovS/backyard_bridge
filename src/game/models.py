@@ -30,7 +30,6 @@ class Game:
         self.game_id = game_id
         self.players = self.shuffle_players(players=players)
         self.is_active = True
-        # self.first_move = True
         self.current_player_index = 0
         self.chosen_suit = None
         self.four_of_a_kind_tracker: FourOfAKindTracker = FourOfAKindTracker()
