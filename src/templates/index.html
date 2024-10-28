@@ -79,18 +79,18 @@
 
             </div>
 
-            <div id="popup" class="popup-window">
-                <div class="popup-grid">
-                    <div class="popup-cell-1">
+            <div id="jack-widget" class="jack-widget-window">
+                <div class="jack-widget-grid">
+                    <div class="jack-widget-cell-1">
                         <p>♠</p>
                     </div>
-                    <div class="popup-cell-2">
+                    <div class="jack-widget-cell-2">
                         <p>♥</p>
                     </div>
-                    <div class="popup-cell-3">
+                    <div class="jack-widget-cell-3">
                         <p>♦</p>
                     </div>
-                    <div class="popup-cell-4">
+                    <div class="jack-widget-cell-4">
                         <p>♣</p>
                     </div>
                 </div>
@@ -152,7 +152,7 @@
             cardsLeft: document.getElementById("cardsLeft"),
             rightCard: document.getElementById("rightCard"),
             leftCard: document.getElementById("leftCard"),
-            popUp: document.getElementById('popup'),
+            jackWidget: document.getElementById('jack-widget'),
             rulesWidget: document.getElementById('rules-widget'),
             scoresRate: document.getElementById('scoresRate'),
         };
@@ -498,7 +498,7 @@
             elements.rightCard.appendChild(newCardImage);
 
             if (card.rank === 'J') {
-                showPopup(card);
+                showJackWidget(card);
             } else {
                 ws.send(JSON.stringify({ type: 'played_card', card: card, chosen_suit: null }));
             }
@@ -572,7 +572,7 @@
         function firstTurn(card) {
             if (currentPlayer === userId) {
                 if (card.rank === 'J') {
-                    showPopup(card)
+                    showJackWidget(card)
                 } else {
                     ws.send(JSON.stringify({type: 'played_card', card: card, chosen_suit: null }));
                 }
@@ -580,8 +580,8 @@
         }
 
 
-        function showPopup(card) {
-            elements.popUp.style.display = 'block';
+        function showJackWidget(card) {
+            elements.jackWidget.style.display = 'block';
 
             const playerCards = elements.playerHand.querySelectorAll('.card');
             playerCards.forEach(cardDiv => {
@@ -592,7 +592,7 @@
             });
 
             const suits = ['♠', '♥', '♦', '♣'];
-            const cells = document.querySelectorAll('.popup-grid div');
+            const cells = document.querySelectorAll('.jack-widget-grid div');
 
             cells.forEach((cell, index) => {
                 let newCell = cell.cloneNode(true);
@@ -601,7 +601,7 @@
                 newCell.addEventListener('click', function() {
                     const selectedSuit = suits[index];
 
-                    elements.popUp.style.display = 'none';
+                    elements.jackWidget.style.display = 'none';
 
                     ws.send(JSON.stringify({ type: 'played_card', card: card, chosen_suit: selectedSuit }));
                 });
