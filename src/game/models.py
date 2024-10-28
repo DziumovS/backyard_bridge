@@ -30,7 +30,7 @@ class Game:
         self.game_id = game_id
         self.players = self.shuffle_players(players=players)
         self.is_active = True
-        self.first_move = True
+        # self.first_move = True
         self.current_player_index = 0
         self.chosen_suit = None
         self.four_of_a_kind_tracker: FourOfAKindTracker = FourOfAKindTracker()
@@ -66,6 +66,16 @@ class Game:
             player.scores += (points * self.deck.scores_rate)
             if player.user_id in self.last_cards_j:
                 player.scores -= ((self.last_cards_j[player.user_id] * 20) * self.deck.scores_rate)
+
+    def get_players_scores_and_losers(self):
+        players_scores = []
+        losers = []
+        for player in self.players:
+            player_info = {"player": player.user_name, "scores": player.scores}
+            players_scores.append(player_info)
+            if player.scores > 125:
+                losers.append(player_info)
+        return players_scores, losers
 
     def is_it_bridge(self, card: Card) -> bool:
         return self.four_of_a_kind_tracker.checking(card.rank)
