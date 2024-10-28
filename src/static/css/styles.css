@@ -149,12 +149,13 @@ button:active {
 
 .errorMessage {
     height: 20px;
-    width: 300px;
+    width: 95%;
     margin: 10px 0 0 0;
     text-align: center;
     font-family: 'Comic Sans MS', 'Comic Sans', cursive;
     color: red;
     font-size: 20px;
+    z-index: 1;
 }
 
 .buttonContainer {
@@ -179,7 +180,6 @@ button:active {
     width: 100vw;
     height: 100vh;
     background-color: rgba(0, 0, 0, 0.7);
-    display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
@@ -188,15 +188,10 @@ button:active {
 .rules-widget-content {
     background-color: rgba(255, 240, 212, 1);
     width: 80vw;
-    max-height: 80vh;
     overflow-y: auto;
     position: relative;
     border-radius: 20px;
     box-shadow: 0 0 30px 20px rgba(255, 165, 0, 0.7);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
 }
 
 .close-rules-widget {
@@ -219,30 +214,11 @@ button:active {
     background-color: #ddd;
 }
 
-.rules-widget-grid {
-    display: flex;
-    justify-content: space-between;
-    gap: 3px;
-    width: 100%;
-    background-color: rgba(255, 165, 0, 0.3);
-    font-size: 13px;
-}
-
 .rules-column {
-    flex: 1;
     padding: 10px;
-    border-radius: 5px;
-    background-color: #f0f0f0;
     overflow-y: auto;
     max-height: 60vh;
-}
-
-.rules-column-en, .rules-column-ru {
-    background-color: rgba(255, 240, 212, 1);
-}
-
-.rules-widget-content {
-    -webkit-overflow-scrolling: touch;
+    font-size: 13px;
 }
 
 .rules-widget-content::-webkit-scrollbar {
@@ -282,6 +258,8 @@ button:active {
 .turnText {
     font-size: 35px;
     color: white;
+    z-index: 1;
+    text-align: center;
 }
 
 #playerHand {
@@ -289,7 +267,7 @@ button:active {
     display: flex;
     justify-content: center;
     align-items: flex-end;
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: #d8dbe2;
     padding: 10px 0 50px 0;
     box-sizing: border-box;
     overflow: hidden;
@@ -329,7 +307,7 @@ button:active {
     width: 100%;
     max-width: 330px;
     height: 150px;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: #d8dbe2;
     padding: 20px;
     box-sizing: border-box;
     gap: 100px;
