@@ -155,7 +155,7 @@ button:active {
     font-family: 'Comic Sans MS', 'Comic Sans', cursive;
     color: red;
     font-size: 20px;
-    z-index: 1;
+    z-index: 3;
 }
 
 .buttonContainer {
@@ -182,7 +182,7 @@ button:active {
     background-color: rgba(0, 0, 0, 0.7);
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 1;
 }
 
 .rules-widget-content {
@@ -207,7 +207,7 @@ button:active {
     background-color: black;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
     transition: background-color 0.2s ease;
-    z-index: 10;
+    z-index: 2;
 }
 
 .close-rules-widget:hover {
@@ -228,10 +228,6 @@ button:active {
 .rules-widget-content::-webkit-scrollbar-thumb {
     background-color: #ccc;
     border-radius: 4px;
-}
-
-#scoresRate {
-    margin-left: 5px;
 }
 
 #usersHeader {
@@ -301,7 +297,7 @@ button:active {
     justify-content: center;
     align-items: center;
     position: absolute;
-    top: 50%;
+    top: 53%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 100%;
@@ -310,7 +306,7 @@ button:active {
     background-color: #d8dbe2;
     padding: 20px;
     box-sizing: border-box;
-    gap: 100px;
+    gap: 10px;
 }
 
 .current-card {
@@ -321,14 +317,20 @@ button:active {
     flex-direction: column;
 }
 
-#cards-left {
+.betweenCurrentCards {
+    display: flex;
+    gap: 45px;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+#cards-left, #scoresRate {
     text-align: center;
-    margin-top: 15px;
     cursor: default;
 }
 
-.deck-len {
-    margin: 5px 0 0 0;
+.deck-len, .scores-rate {
+    margin: 3px 0 0 0;
     padding: 0;
     font-weight: bold;
     font-size: 20px;
@@ -366,7 +368,7 @@ button:active {
     box-shadow: 0 0 30px 20px rgba(255, 165, 0, 0.7);
     padding: 0;
     box-sizing: border-box;
-    z-index: 999;
+    z-index: 1;
 }
 
 .jack-widget-window::before,

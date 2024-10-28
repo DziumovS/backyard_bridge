@@ -31,8 +31,6 @@
                 </form>
             </p>
 
-            <p id="scoresRate" class="hidden"></p>
-
             <p id="usersHeader">Active players:</p>
             <ul id="users"></ul>
 
@@ -67,12 +65,17 @@
 
                 <div class="current-card" id="leftCard" onclick="drawCard()">
                     <img src="/static/cards/closed_card.png" alt="closed_card" />
+                </div>
 
+                <div class="betweenCurrentCards">
+                    <div id="scores-rate-now" onclick="">
+                        <p>Scores rate:</p>
+                        <p class="scores-rate" id="scoresRate"></p>
+                    </div>
                     <div id="cards-left" onclick="">
                         <p>Cards left:</p>
                         <p class="deck-len" id="cardsLeft"></p>
                     </div>
-
                 </div>
 
                 <div class="current-card" id="rightCard" onclick="skip_turn()"></div>
@@ -305,15 +308,13 @@
 
 
         function showError(message, seconds) {
-            const previousZIndex = elements.errorMessage.style.zIndex;
-
             elements.errorMessage.innerHTML = message;
             elements.errorMessage.style.display = "block";
 
             return new Promise((resolve) => {
                 setTimeout(() => {
+                    elements.errorMessage.innerHTML = "";
                     elements.errorMessage.style.display = "none";
-                    elements.errorMessage.style.zIndex = previousZIndex;
                     resolve();
                 }, seconds * 1000);
             });
@@ -334,7 +335,6 @@
 
             elements.lobbyControls.style.display = "none";
             elements.currentCards.style.display = "flex";
-            elements.scoresRate.style.display = 'block';
         }
 
 
@@ -548,7 +548,6 @@
                 ws.send(JSON.stringify({type: 'skip_turn'}));
 
                 elements.errorMessage.style.display = "none";
-                elements.errorMessage.style.zIndex = "0";
             }
         }
 
@@ -722,6 +721,7 @@
                 resetCardState(card);
             };
         }
+
 
         function resetCardState(card) {
             elements.leftCard.querySelector("img").src = "/static/cards/closed_card.png";
