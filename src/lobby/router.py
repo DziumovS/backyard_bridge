@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from src.connection.manager import ConnectionManager
-from src.lobby.rules_txt import rules_ru, rules_en
+from src.lobby.rules_txt import rules
 from src.lobby.manager import LobbyManager
 from src.game.manager import GameManager
 from src.game.models import Game
@@ -30,7 +30,7 @@ async def check_lobby(lobby_id: str):
 
 @router.get("/rules")
 async def get_rules():
-    return JSONResponse(content={"rules_ru": rules_ru, "rules_en": rules_en})
+    return JSONResponse(content={"rules": rules})
 
 
 @router.websocket("/ws/lobby/{user_id}")
