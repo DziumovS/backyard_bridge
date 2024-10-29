@@ -66,7 +66,7 @@ class GameManager:
                 "current_card": game.current_card_to_dict(),
                 "player_options": player.options_to_dict(),
 
-                "scores_rate": f"Scores rate: <b>x{game.deck.scores_rate}</b>",
+                "scores_rate": f"<b>x{game.deck.scores_rate}</b>",
                 "scores_rate_up": True if game.deck.scores_rate > 1 and not game.deck.bounce_deck else False,
 
                 "players_hands": [{"player_id": p.user_id, "hand_len": len(p.hand)} for p in game.players]  # to do
@@ -79,7 +79,7 @@ class GameManager:
         if game:
             left_player = game.get_player_or_none(user_id=player_id)
             game.remove_player(user_id=player_id)
-            message = f"Player {left_player.user_name} has left the game."
+            message = f"Player <b>{left_player.user_name}</b> has left the game."
 
             while left_player.hand:
                 game.deck.bounce_deck.append(left_player.hand.pop())
