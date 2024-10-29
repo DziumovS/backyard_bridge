@@ -61,4 +61,3 @@ class Deck:
         shuffle(self.deck)
         self.bounce_deck = []
         self.scores_rate += 1
-        print("Scores: x2")
