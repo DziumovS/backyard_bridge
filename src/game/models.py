@@ -63,18 +63,19 @@ class Game:
                     points += points_mapping[card.rank]
 
             player.scores += (points * self.deck.scores_rate)
-            if player.user_id in self.last_cards_j:
-                player.scores -= ((self.last_cards_j[player.user_id] * 20) * self.deck.scores_rate)
+            if player.user_id in self.last_cards_j and only_jacks:
+                player.scores -= ((self.last_cards_j[player.user_id] * points_mapping["J"]) * self.deck.scores_rate)
+            player.scores = 0 if player.scores == 125 else player.scores
 
-    def get_players_scores_and_losers(self):
+    def get_players_game_results(self):
         players_scores = []
         losers = []
+        winners = []
         for player in self.players:
             player_info = {"player": player.user_name, "scores": player.scores}
             players_scores.append(player_info)
-            if player.scores > 125:
-                losers.append(player_info)
-        return players_scores, losers
+            losers.append(player_info) if player.scores > 125 else winners.append(player_info)
+        return players_scores, losers, winners
 
     def is_it_bridge(self, card: Card) -> bool:
         return self.four_of_a_kind_tracker.checking(card.rank)
