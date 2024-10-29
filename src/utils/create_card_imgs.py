@@ -18,7 +18,6 @@ font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 settings_tech_cards = {
     8: "CONTINUE",
-    25: "QUIT",
     13.5: "BRIDGE!"
 }
 
