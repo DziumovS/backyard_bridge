@@ -21,7 +21,7 @@ class FourOfAKindTracker:
         else:
             self.count += 1
 
-        return self.count == 4
+        return self.count == 4 and self.current_rank != "6"
 
 
 class Game:
@@ -34,6 +34,7 @@ class Game:
         self.chosen_suit = None
         self.four_of_a_kind_tracker: FourOfAKindTracker = FourOfAKindTracker()
         self.last_cards_j = {}
+        self.why_end = None
 
         for player in self.players:
             for _ in range(5):
@@ -134,15 +135,16 @@ class Game:
         self.deck.insert_to_bounce_deck(previous_card=card)
 
     def handle_card_six(self, current_player: Player):
+        decks_empty = self.deck.is_decks_empty()
         playable_cards = current_player.get_playable_cards(
             current_card=self.current_card,
             chosen_suit=self.chosen_suit,
         )
         if playable_cards:
             current_player.options.can_skip = False
-            current_player.options.can_draw = True
+            current_player.options.can_draw = not decks_empty
         else:
-            current_player.options.must_draw += 1
+            current_player.options.must_draw = 0 if decks_empty else current_player.options.must_draw + 1
 
     def _handle_card_six(self, current_player: Player, card: Card):
         self.remove_played_card(current_player=current_player, card=card)
@@ -209,3 +211,46 @@ class Game:
                 self._handle_card_ace(current_player=current_player, card=card)
             case _:
                 self._handle_normal_card(current_player=current_player, card=card)
+
+    def get_game_over_message(self, current_player: Player):
+        players_scores, losers, winners = self.get_players_game_results()
+        player_username = current_player.user_name
+
+        match self.why_end:
+            case "bridge":
+                message = f"<b>{player_username}</b> call 'bridge', so the match is over.<br><br>"
+            case "empty_deck":
+                message = f"<b>No more cards</b> in the deck, so the match is over.<br><br>"
+            case _:
+                message = f"<b>{player_username}</b> has won: he has no more cards, so the match is over.<br><br>"
+
+        results = f"{message}Now the scores are:<br>"
+        results += "<br>".join(
+            [
+                f"&nbsp;&nbsp;<b>{player['player']}</b>: <b>{player['scores']}</b> points"
+                for player in players_scores
+            ]
+        )
+
+        if losers:
+            results = (f"{message}Also, the <b>game is over too</b> because we have "
+                       f"{"a loser" if len(losers) == 1 else "losers"} by points:<br>")
+            results += "<br>".join(
+                [
+                    f"&nbsp;&nbsp;<b>{user['player']}</b>: <b>{user['scores']}</b> points"
+                    for user in losers
+                ]
+            )
+
+            if winners:
+                w_ws, g_gs = ("winner", "god") if len(winners) == 1 else ("winners", "gods")
+                results += f"<br><br>And <b>congratulations</b> to the {w_ws} of this game:<br>"
+                results += "<br>".join(
+                    [
+                        f"&nbsp;&nbsp;<b>{user['player']}</b>: <b>{user['scores']}</b> points"
+                        for user in winners
+                    ]
+                )
+                results += f"<br>You fought like {g_gs}!"
+
+        return message, results
