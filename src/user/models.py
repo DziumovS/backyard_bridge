@@ -75,8 +75,5 @@ class Player(User):
                     to_dict=True
                 )
 
-    def has_won(self) -> bool:
-        return len(self.hand) == 0
-
-    def has_lost(self) -> bool:
-        return self.scores > 125
+    def has_won(self, card: Card) -> bool:
+        return len(self.hand) == 0 and card.rank != "6"
