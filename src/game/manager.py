@@ -73,6 +73,58 @@ class GameManager:
             }
         )
 
+    async def handle_game_over(self, current_player: Player, next_player: Player, game: Game):
+        if next_player.options.must_draw:
+            message = f"You got {"2 cards" if game.current_card.rank == "8" else "1 card"} from the deck."
+
+            if not game.deck.deck and not game.deck.bounce_deck:
+                game.deck.add_to_deck_random_card()
+                message = f"You got {"2 random cards" if game.current_card.rank == "8" else "1 random card"}."
+
+            next_player.draw_card(deck=game.deck)
+
+            await self.send_whose_turn(
+                websocket=next_player.websocket,
+                message=message,
+                user_id=next_player.user_id
+            )
+
+            for player in game.players:
+                is_current_player = player.user_id == next_player.user_id
+                await self.send_game_data(
+                    player=player,
+                    current_player=is_current_player,
+                    game=game,
+                    chosen_suit=game.chosen_suit,
+                    playable_cards=False
+                )
+
+            await self.connection_manager.send_message(
+                websocket=next_player.websocket,
+                message={"type": "game_over_draw_card"})
+            next_player.options.must_draw -= 1
+
+        elif not next_player.options.must_draw:
+            game.calculate_scores()
+
+            message, results = game.get_game_over_message(current_player=current_player)
+
+            for player in game.players:
+                await self.connection_manager.send_message(
+                    websocket=player.websocket,
+                    message={
+                        "type": "game_over",
+                        "error_msg": message,
+                        "widget_msg": results,
+                        "player_scores": player.scores
+                    }
+                )
+
+
+
+
+
+
     # start to do
     async def handle_disconnect_game(self, player_id: str, error: bool = False):
         game = self.get_game_by_player_id(player_id=player_id)
