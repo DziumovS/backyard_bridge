@@ -120,12 +120,6 @@ class GameManager:
                     }
                 )
 
-
-
-
-
-
-    # start to do
     async def handle_disconnect_game(self, player_id: str, error: bool = False):
         game = self.get_game_by_player_id(player_id=player_id)
         if game:
@@ -186,4 +180,3 @@ class GameManager:
                     await self.connection_manager.disconnect(websocket=player.websocket)
 
                 self.remove_game(game.game_id)
-    # end to do
