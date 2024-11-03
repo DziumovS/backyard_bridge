@@ -28,8 +28,9 @@ class Player(User):
         self.scores: int = 0
         self.options: PlayerOptions = PlayerOptions()
 
-    def set_default_options(self):
+    def set_default_options(self, can_draw: bool = True):
         self.options = PlayerOptions()
+        self.options.can_draw = can_draw
 
     def options_to_dict(self) -> Dict:
         return {
