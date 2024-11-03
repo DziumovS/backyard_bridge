@@ -1,5 +1,5 @@
 from itertools import product
-from random import shuffle
+from random import shuffle, choice
 from typing import List
 
 
@@ -46,6 +46,15 @@ class Deck:
         deck = [Card(rank, suit) for suit, rank in product(self.suits, self.ranks)]
         shuffle(deck)
         return deck
+
+    def add_to_deck_random_card(self):
+        self.deck.append(Card(rank=choice(self.ranks), suit=choice(self.suits)))
+
+    def is_decks_empty(self):
+        return not self.deck and not self.bounce_deck
+
+    def is_decks_empty_for_eight(self, card: Card):
+        return card.rank == "8" and not self.deck and len(self.bounce_deck) == 1
 
     def draw_card(self) -> Card:
         if not len(self.deck):
