@@ -65,6 +65,13 @@ def create_closed_card():
     card_img.save(f"{PATH_TO_SAVE}closed_card.png", quality=1, optimize=True)
 
 
+def create_opponent_card():
+    card_img = create_card_template(fill=(251, 186, 0))
+
+    card_img = card_img.convert("P", palette=Image.ADAPTIVE)
+    card_img.save(f"{PATH_TO_SAVE}opponent_card.png", quality=1, optimize=True)
+
+
 def create_playing_card(rank, suit):
     card_img = create_card_template(fill="white")
     draw = ImageDraw.Draw(card_img)
@@ -109,6 +116,7 @@ def create_tech_cards(x, text):
 
 def create_deck():
     create_closed_card()
+    create_opponent_card()
 
     for suit in suits:
         card_img = create_suit_cards(suit)
