@@ -99,8 +99,9 @@ class Game:
                 return player
         return None
 
-    def remove_player(self, user_id: str):
-        self.players = [player for player in self.players if player.user_id != user_id]
+    def remove_player(self, player: Player):
+        if player in self.players:
+            self.players.remove(player)
 
     def get_players(self) -> List[Dict]:
         return [
