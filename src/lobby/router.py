@@ -46,29 +46,29 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
 
             match data["type"]:
                 case "create_lobby":
-                    await lobby_manager.handle_create_lobby(user=user, websocket=websocket)
+                    await lobby_manager.handlers.handle_create_lobby(user=user, websocket=websocket)
 
                 case "close_lobby":
                     lobby = lobby_manager.get_lobby_by_user_id(user_id=user_id)
                     if lobby:
-                        await lobby_manager.handle_disconnect_lobby(user_id=user_id)
+                        await lobby_manager.handlers.handle_disconnect_lobby(user_id=user_id)
                     break
 
                 case "join_lobby":
                     lobby_id = data.get("lobby_id")
-                    await lobby_manager.handle_join_lobby(user=user, websocket=websocket, lobby_id=lobby_id)
+                    await lobby_manager.handlers.handle_join_lobby(user=user, websocket=websocket, lobby_id=lobby_id)
 
                 case "start_game":
-                    game_data = await lobby_manager.handle_start_game(user_id=user_id)
+                    game_data = await lobby_manager.handlers.handle_start_game(user_id=user_id)
                     game_id, players = game_data
                     game = Game(game_id=game_id, players=players)
                     game_manager.create_game(game=game)
-                    await lobby_manager.handle_disconnect_lobby(user_id=user_id)
+                    await lobby_manager.handlers.handle_disconnect_lobby(user_id=user_id)
                     break
 
     except WebSocketDisconnect as err:
         match err.code:
             case 1001 | 1012:
-                await lobby_manager.handle_disconnect_lobby(user_id=user_id, error=True)
+                await lobby_manager.handlers.handle_disconnect_lobby(user_id=user_id, error=True)
             case _:
                 pass
