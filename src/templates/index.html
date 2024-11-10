@@ -3,7 +3,8 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport"
-              content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+              content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
+
         <meta http-equiv="X-UA-Compatible" content="ie=edge">
         <link rel="stylesheet" href="/static/css/styles.css">
         <title>Backyard Bridge</title>
@@ -11,28 +12,45 @@
 
     <body>
         <header>
-
+            <h1>Backyard Bridge</h1>
+            <button id="rulesButton" onclick="showRulesWidget()">Rules</button>
         </header>
 
         <div class="content">
 
-            <h1>Backyard Bridge</h1>
+            <div class="users-data">
 
-            <button id="rulesButton" onclick="showRulesWidget()" style="display: block;">Rules</button>
+                <div class="name-and-scores" id="nameAndScores">
+                    <div class="playerName">
+                        <p class="name-container">
+                            Your name:
+                            <span id="ws-id" class="hidden"></span>
+                            <form id="nameForm" onsubmit="updateUsername(event)" class="name-form">
+                                <input type="text" id="nameInput" maxlength="13" class="name-input" />
+                                <button id="changeName" type="submit" disabled>Change name</button>
+                            </form>
+                        </p>
+                    </div>
 
-            <p class="name-container">
-                Your name:
-                <span id="ws-id" class="hidden"></span>
-                <form id="nameForm" onsubmit="updateUsername(event)" class="name-form">
-                    <input type="text" id="nameInput" maxlength="20" class="name-input" />
+                    <div class="playerScore">
+                        <p id="scores" style="display: none;">
+                            Your scores:
+                            <span id="pS"></span>
+                        </p>
+                    </div>
+                </div>
 
-                    <button id="changeName" type="submit" disabled>Change name</button>
+                <div class="users-list">
+                    <div class="usersHeader" id="usersHeader">
+                        <p>Active Players:</p>
+                        <div class="usersContainer" id="usersList">
 
-                </form>
-            </p>
+                        </div>
 
-            <p id="usersHeader">Active players:</p>
-            <ul id="users"></ul>
+                    </div>
+                </div>
+
+            </div>
 
             <div class="preLobbyControls">
 
@@ -53,7 +71,6 @@
 
                     <div class="buttonContainer">
                         <button id="startButton" onclick="startGame()" style="display: none;" disabled>Start Game</button>
-
                         <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
                     </div>
 
@@ -99,7 +116,7 @@
                 </div>
             </div>
 
-            <div id="rules-widget" class="rules-widget-window" style="display: none;">
+            <div id="rules-widget" class="rules-widget-window">
                 <div class="rules-widget-content">
                     <div class="rules-widget-header">
                         <span id="closeRulesWidget" class="close-rules-widget">&times;</span>
@@ -107,6 +124,20 @@
                     <div class="rules-column">
                         <p></p>
                     </div>
+                </div>
+            </div>
+
+            <div id="game-over-widget" class="game-over-widget-window">
+                <div class="game-over-widget-content">
+                    <div class="results-column">
+                        <p></p>
+                    </div>
+
+                    <div class="gameOverButtons">
+                        <button id="continueGameButton" onclick="startNewGame()">Start Game</button>
+                        <button id="leaveGameButton" onclick="backToHomePage('Thanks for playing! Bye!', 0.3)">Leave Game</button>
+                    </div>
+
                 </div>
             </div>
 
@@ -127,16 +158,18 @@
     <script>
         let ws;
         let lobbyId;
-        let userId = Date.now().toString();
+        let userId = Date.now().toString().slice(-9);
         let userName = userId;
         let isHost = false;
-        let currentPlayer = '';
+        let currentPlayer = "";
         let eventHandlersAdded = false;
         let game_over = false;
+        let errorTimeout;
 
 
         const elements = {
             wsId: document.querySelector("#ws-id"),
+            pS: document.querySelector("#pS"),
             nameForm: document.getElementById("nameForm"),
             createLobbyButton: document.getElementById("createLobbyButton"),
             joinLobbyInput: document.getElementById("lobbyInput"),
@@ -147,7 +180,7 @@
             lobbyControls: document.getElementById("lobbyControls"),
             lobbyMessage: document.getElementById("lobbyMessage"),
             usersHeader: document.getElementById("usersHeader"),
-            usersList: document.getElementById("users"),
+            usersList: document.getElementById("usersList"),
             currentCards: document.getElementById("currentCards"),
             nameInput: document.getElementById("nameInput"),
             playerHand: document.getElementById("playerHand"),
@@ -155,9 +188,12 @@
             cardsLeft: document.getElementById("cardsLeft"),
             rightCard: document.getElementById("rightCard"),
             leftCard: document.getElementById("leftCard"),
-            jackWidget: document.getElementById('jack-widget'),
-            rulesWidget: document.getElementById('rules-widget'),
-            scoresRate: document.getElementById('scoresRate'),
+            jackWidget: document.getElementById("jack-widget"),
+            rulesWidget: document.getElementById("rules-widget"),
+            scoresRate: document.getElementById("scoresRate"),
+            nameAndScores: document.getElementById("nameAndScores"),
+            playerScores: document.getElementById("scores"),
+            gameOverWidget: document.getElementById("game-over-widget"),
         };
 
 
@@ -165,13 +201,13 @@
         elements.nameInput.placeholder = userName;
 
 
-        elements.joinLobbyInput.addEventListener('input', function () {
+        elements.joinLobbyInput.addEventListener("input", function () {
             elements.joinLobbyButton.disabled = !elements.joinLobbyInput.value.trim();
         });
 
-        elements.nameInput.addEventListener('input', function () {
+        elements.nameInput.addEventListener("input", function () {
             const inputText = elements.nameInput.value.trim();
-            document.getElementById('changeName').disabled = inputText.length === 0;
+            document.getElementById("changeName").disabled = inputText.length === 0;
         });
 
 
@@ -191,10 +227,10 @@
 
         function setLobbyUI(isHostView) {
             elements.wsId.style.display = "block";
-            elements.createLobbyButton.style.display = 'none';
+            elements.createLobbyButton.style.display = "none";
             elements.nameForm.style.display = "none";
-            elements.joinLobbyInput.style.display = 'none';
-            elements.joinLobbyButton.style.display = 'none';
+            elements.joinLobbyInput.style.display = "none";
+            elements.joinLobbyButton.style.display = "none";
             elements.lobbyControls.style.display = "block";
             elements.leaveLobbyButton.style.display = "inline";
             elements.startButton.style.display = isHostView ? "block" : "none";
@@ -204,7 +240,7 @@
 
         function createLobby() {
             setLobbyUI(true);
-            initializeWebSocket('create_lobby', {user_name: userName});
+            initializeWebSocket("create_lobby", { user_name: userName });
         }
 
 
@@ -217,9 +253,9 @@
 
             if (data.exists) {
                 setLobbyUI(false);
-                initializeWebSocket('join_lobby', {user_name: userName, lobby_id: inputLobbyId});
+                initializeWebSocket("join_lobby", { user_name: userName, lobby_id: inputLobbyId });
             } else {
-                await showError(`${data.msg}`, 2);
+                await showError(data.msg, 2);
             }
         }
 
@@ -241,78 +277,101 @@
             const data = JSON.parse(event.data);
 
             switch (data.type) {
-                case 'lobby_created':
+                case "lobby_created":
                     lobbyId = data.lobby_id;
-                    elements.lobbyMessage.innerHTML = `${data.msg}`;
+                    elements.lobbyMessage.innerHTML = data.msg;
                     break;
 
-                case 'joined_lobby':
+                case "joined_lobby":
                     lobbyId = data.lobby_id;
-                    elements.lobbyMessage.innerHTML = `${data.msg}`;
+                    elements.lobbyMessage.innerHTML = data.msg;
                     updateUsers(data.users, false);
                     break;
 
-                case 'users_update':
+                case "users_update":
                     updateUsers(data.users, data.is_host);
                     break;
 
-                case 'start_game':
+                case "start_game":
                     startGame();
                     break;
 
-                case 'lobby_closed':
+                case "lobby_closed":
                     returnToMainPage();
                     break;
 
-                case 'toggle_start_button':
+                case "toggle_start_button":
                     toggleStartButton(data.enable);
                     break;
 
-                case 'game_data':
-                    console.log(data)
-                    checkScoresRate(data.scores_rate, data.scores_rate_up)
-                    updatePlayerHand(data.hand, data.current_player, data.playable_cards);
+                case "game_data":
+                    checkScoresRate(data.scores_rate);
+                    updatePlayerHand(data.hand, data.current_player, data.playable_cards, "current");
+                    updateOpponentData(data.players_hands);
                     updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit, data.player_options);
                     break;
 
-                case 'whose_turn':
+                case "whose_turn":
                     whoseTurn(data.msg, data.current_player);
                     break;
 
-                case 'first_turn':
+                case "first_turn":
                     firstTurn(data.current_card);
                     break;
 
-                case 'not_enough_players':
-                    backToHomePage(data.msg);
+                case "not_enough_players":
+                    backToHomePage(data.msg, 3);
                     break;
 
-                case 'show_error':
-                    showError(data.msg, 5)
-                    break
+                case "show_error":
+                    showError(data.msg, 2);
+                    break;
 
-                case 'is_it_bridge':
-                    showError(data.msg, 5)
-                    isItBridge(data.current_card)
-                    break
+                case "is_it_bridge":
+                    showError(data.msg, 4);
+                    isItBridge(data.current_card);
+                    break;
 
-                case 'game_over':
-                    showError(data.msg, 10)
-                    break
+                case "game_over":
+                    removeHighlighted("#leftCard img");
+                    showError(data.error_msg, 5).then(() => {
+                        showGameOverWidget(data.widget_msg, data.players_scores, data.player_scores);
+                    });
+                    break;
 
-                case 'bridge_draw_card':
+                case "game_over_draw_card":
                     game_over = true;
-                    drawCard()
+                    drawCard();
+                    break;
+
+                case "leave_game":
+                    leaveGame(data.player_id);
+                    break;
+
+                case "animate_played_card":
+                    playCard(data.card, "opponent");
+                    break;
+
+                case "animate_draw_card":
+                    change_player(data.current_player);
+                    animateDrawCard("opponent");
+                    break;
+
+                case "game_reset":
+                    reset_game(data.player_scores);
+                    break;
             }
         }
 
 
         function showError(message, seconds) {
+            clearTimeout(errorTimeout);
+
             elements.errorMessage.innerHTML = message;
             elements.errorMessage.style.display = "block";
 
             return new Promise((resolve) => {
-                setTimeout(() => {
+                errorTimeout = setTimeout(() => {
                     elements.errorMessage.innerHTML = "";
                     elements.errorMessage.style.display = "none";
                     resolve();
@@ -323,23 +382,53 @@
 
         function startGame() {
             if (isHost) {
-                ws.send(JSON.stringify({type: 'start_game'}));
+                ws.send(JSON.stringify({ type: "start_game" }));
             }
 
             ws = new WebSocket(`ws://localhost:8000/ws/game/${lobbyId}/${userId}`);
 
-            ws.onopen = () => ws.send(JSON.stringify({type: 'game_started'}));
+            ws.onopen = () => ws.send(JSON.stringify({ type: "game_started" }));
             ws.onmessage = function (event) {
                 handleWebSocketMessage(event);
             };
 
             elements.lobbyControls.style.display = "none";
             elements.currentCards.style.display = "flex";
+            elements.nameAndScores.style.flexDirection = "row";
+            elements.pS.innerHTML = "0";
+            elements.scoresRate.innerHTML = "x1";
+            elements.playerScores.style.display = "block";
+
+            elements.usersHeader.style.fontSize = "12px";
+            elements.usersList.style.fontSize = "12px";
+            elements.usersList.style.flexDirection = "row";
+
+            const currentPlayerContainer = document.getElementById(userId);
+            currentPlayerContainer.style.display = "none";
+
+            const opponentScores = document.querySelectorAll('.opponentScores');
+            opponentScores.forEach(scores => {
+                scores.style.display = "flex";
+                scores.style.justifyContent = "center";
+            })
+
+            const opponentHands = document.querySelectorAll('.opponent_hand');
+                opponentHands.forEach(hand => {
+                    hand.style.display = "flex";
+                });
+        }
+
+
+        function leaveGame(playerId) {
+            const playerContainer = document.getElementById(playerId);
+            if (playerContainer) {
+                playerContainer.remove();
+            }
         }
 
 
         function leaveLobby() {
-            ws.send(JSON.stringify({type: 'close_lobby', lobby_id: lobbyId}));
+            ws.send(JSON.stringify({ type: "close_lobby", lobby_id: lobbyId }));
 
             returnToMainPage();
         }
@@ -347,32 +436,99 @@
 
         function returnToMainPage() {
             elements.lobbyControls.style.display = "none";
-            elements.createLobbyButton.style.display = 'inline';
+            elements.createLobbyButton.style.display = "inline";
             elements.nameForm.style.display = "none";
-            elements.joinLobbyInput.style.display = 'inline';
-            elements.joinLobbyInput.value = '';
-            elements.joinLobbyButton.style.display = 'inline';
+            elements.joinLobbyInput.style.display = "inline";
+            elements.joinLobbyInput.value ="";
+            elements.joinLobbyButton.style.display = "inline";
             elements.joinLobbyButton.disabled = true;
             elements.leaveLobbyButton.style.display = "none";
             elements.errorMessage.style.display = "none";
             elements.currentCards.style.display = "none";
-            elements.usersHeader.style.display = 'none';
-            elements.usersList.style.display = 'none';
+            elements.usersHeader.style.display = "none";
+            elements.usersList.style.display = "none";
         }
 
 
         function updateUsers(users, isHost) {
-            elements.usersList.style.display = 'block';
-            elements.usersList.innerHTML = '';
-            elements.usersHeader.style.display = 'block';
+            elements.usersList.style.display = "flex";
+            elements.usersList.innerHTML ="";
+            elements.usersHeader.style.display = "block";
 
             users.forEach(user => {
-                const userElement = document.createElement("li");
+                const opponentContainer = document.createElement("div");
+                opponentContainer.className = user.user_id;
+                opponentContainer.id = user.user_id;
+
+                const userElement = document.createElement("p");
                 userElement.textContent = user.user_name;
-                elements.usersList.appendChild(userElement);
+                opponentContainer.appendChild(userElement);
+                elements.usersList.appendChild(opponentContainer);
+
+                const opponentHand = document.createElement("div");
+                opponentHand.className = "opponent_hand";
+                opponentHand.id = `${user.user_id}_hand`;
+
+                const opponentScores = document.createElement("div");
+                opponentScores.className = "opponentScores";
+                opponentScores.id = "opponentScores";
+
+                const scoresName = document.createElement("p");
+                scoresName.innerHTML = "Scores:";
+                scoresName.style.marginRight = "3px";
+
+                const oS = document.createElement("span");
+                oS.id = `${user.user_id}_oS`;
+                oS.style.fontWeight = "bold";
+                oS.textContent = "0";
+
+                opponentScores.appendChild(scoresName);
+                opponentScores.appendChild(oS);
+
+                opponentContainer.appendChild(opponentScores);
+
+                opponentContainer.appendChild(opponentHand);
+                
             });
 
             if (isHost) toggleStartButton(true);
+        }
+
+
+        function updateOpponentData(playersHands) {
+            playersHands.forEach(player => {
+                const opponentHand = document.getElementById(`${player.player_id}_hand`);
+                opponentHand.innerHTML ="";
+
+                const containerWidth = 100;
+                const cardWidth = 20;
+                const gap = 1;
+
+                const totalCardsWidth = player.hand_len * (cardWidth + gap) - gap;
+
+                let overlap = 0;
+                let startLeftPosition = 0;
+
+                if (totalCardsWidth > containerWidth) {
+                    overlap = (totalCardsWidth - containerWidth) / (player.hand_len - 1);
+                    overlap = Math.min(overlap, cardWidth - gap);
+                } else {
+                    startLeftPosition = (containerWidth - totalCardsWidth) / 2;
+                }
+
+                for (let i = 0; i < player.hand_len; i++) {
+                    const cardDiv = document.createElement("div");
+                    cardDiv.classList.add("opponent_card");
+                    cardDiv.style.left = `${startLeftPosition + i * (cardWidth - overlap) + gap * i}px`;
+
+                    const cardImage = document.createElement("img");
+                    cardImage.src = "/static/cards/opponent_card.png";
+                    cardImage.alt = "opponent_card";
+
+                    cardDiv.appendChild(cardImage);
+                    opponentHand.appendChild(cardDiv);
+                }
+            });
         }
 
 
@@ -381,8 +537,8 @@
         }
 
 
-        function updatePlayerHand(hand, Player, playableCards) {
-            elements.playerHand.innerHTML = '';
+        function updatePlayerHand(hand, player, playableCards, whose) {
+            elements.playerHand.innerHTML = "";
 
             const containerWidth = elements.playerHand.offsetWidth;
             const cardWidth = 90;
@@ -402,22 +558,22 @@
             }
 
             hand.forEach((card, index) => {
-                const cardDiv = document.createElement('div');
-                cardDiv.classList.add('card');
+                const cardDiv = document.createElement("div");
+                cardDiv.classList.add("card");
                 cardDiv.style.left = `${startLeftPosition + index * (cardWidth - overlap) + gap * index}px`;
 
                 const isPlayable = playableCards.some(playableCard =>
                     playableCard.rank === card.rank && playableCard.suit === card.suit
                 );
 
-                if (Player && isPlayable) {
-                    cardDiv.classList.add('highlighted-card-img');
-                    cardDiv.style.bottom = '90px';
-                    cardDiv.onclick = () => playCard(card);
-                    cardDiv.style.cursor = 'pointer';
+                if (player && isPlayable) {
+                    cardDiv.classList.add("highlighted-card-img");
+                    cardDiv.style.bottom = "50px";
+                    cardDiv.onclick = () => playCard(card, whose);
+                    cardDiv.style.cursor = "pointer";
                 }
 
-                const cardImage = document.createElement('img');
+                const cardImage = document.createElement("img");
                 const cardName = `${card.rank}_${card.suit}`;
                 cardImage.src = `/static/cards/${cardName}.png`;
                 cardImage.alt = cardName;
@@ -429,123 +585,179 @@
 
 
         function whoseTurn(message, current_player) {
-            elements.turnText.textContent = `${message}`;
-            currentPlayer = current_player;
+            elements.turnText.textContent = message;
+            change_player(current_player);
+        }
+
+
+        function change_player(whoIsCurrent) {
+            if (whoIsCurrent) {
+                currentPlayer = whoIsCurrent;
+            }
         }
 
 
         function updateCurrentCards(currentCard, deckLen, chosenSuit, playerOptions) {
-            elements.cardsLeft.textContent = `${deckLen}`;
+            elements.cardsLeft.textContent = deckLen;
 
-            const oldImage = elements.rightCard.querySelector('img');
+            const oldImage = elements.rightCard.querySelector("img");
             if (oldImage) oldImage.remove();
 
-            const newRightCardImage = document.createElement('img');
+            const newRightCardImage = document.createElement("img");
             if (chosenSuit) {
                 newRightCardImage.src = `/static/cards/${chosenSuit.suit}.png`;
-                newRightCardImage.alt = `${chosenSuit.suit}`;
+                newRightCardImage.alt = chosenSuit.suit;
             } else {
                 newRightCardImage.src = `/static/cards/${currentCard.rank}_${currentCard.suit}.png`;
                 newRightCardImage.alt = `${currentCard.rank}_${currentCard.suit}`;
             }
 
             elements.rightCard.appendChild(newRightCardImage);
-            checkCurrentPlayerOptions(playerOptions)
-        }
-
-
-        async function playCard(card) {
-            const cardDiv = [...elements.playerHand.children].find(cardElement => {
-                const img = cardElement.querySelector('img');
-                return img.alt === `${card.rank}_${card.suit}`;
-            });
-
-            const startRect = cardDiv.getBoundingClientRect();
-            const endRect = elements.rightCard.getBoundingClientRect();
-            const cardClone = cardDiv.cloneNode(true);
-
-            document.body.appendChild(cardClone);
-
-            cardClone.style.position = 'absolute';
-            cardClone.style.left = `${startRect.left}px`;
-            cardClone.style.top = `${startRect.top}px`;
-            cardClone.style.width = `${startRect.width}px`;
-            cardClone.style.height = `${startRect.height}px`;
-            cardClone.style.transition = 'all 0.5s ease';
-
             setTimeout(() => {
-                cardDiv.style.display = 'none';
-                cardClone.style.left = `${endRect.left}px`;
-                cardClone.style.top = `${endRect.top}px`;
-                cardClone.style.width = `${endRect.width}px`;
-                cardClone.style.height = `${endRect.height}px`;
+                checkCurrentPlayerOptions(playerOptions);
             }, 50);
-
-            await new Promise((resolve) => {
-                cardClone.addEventListener('transitionend', () => {
-                    cardClone.remove();
-                    resolve();
-                });
-            });
-
-            const oldImage = elements.rightCard.querySelector('img');
-            if (oldImage) oldImage.remove();
-
-            const newCardImage = document.createElement('img');
-            newCardImage.src = `/static/cards/${card.rank}_${card.suit}.png`;
-            newCardImage.alt = `${card.rank}_${card.suit}`;
-
-            elements.rightCard.appendChild(newCardImage);
-
-            if (card.rank === 'J') {
-                showJackWidget(card);
-            } else {
-                ws.send(JSON.stringify({ type: 'played_card', card: card, chosen_suit: null }));
-            }
         }
 
 
-        function drawCard() {
-            if (currentPlayer === userId) {
-                const startRect = elements.leftCard.getBoundingClientRect();
-                const cardClone = elements.leftCard.querySelector('img').cloneNode(true);
+        async function playCard(card, whose) {
+            if (whose === "current") {
+                ws.send(JSON.stringify({ type: "show_my_move", card: card }));
 
-                document.body.appendChild(cardClone);
-
-                cardClone.style.position = 'absolute';
-                cardClone.style.left = `${startRect.left}px`;
-                cardClone.style.top = `${startRect.top}px`;
-                cardClone.style.width = `${startRect.width}px`;
-                cardClone.style.height = `${startRect.height}px`;
-                cardClone.style.transition = 'all 0.5s ease';
-
-                setTimeout(() => {
-                    const endRect = elements.playerHand.getBoundingClientRect();
-                    const centerX = endRect.left + (endRect.width / 2) - (startRect.width / 2);
-                    const centerY = endRect.bottom - startRect.height - 10;
-
-                    cardClone.style.left = `${centerX}px`;
-                    cardClone.style.top = `${centerY}px`;
-                    cardClone.style.width = `${startRect.width}px`;
-                    cardClone.style.height = `${startRect.height}px`;
-                }, 50);
-
-                cardClone.addEventListener('transitionend', () => {
-                    cardClone.remove();
+                const cardDiv = [...elements.playerHand.children].find(cardElement => {
+                    const img = cardElement.querySelector('img');
+                    return img.alt === `${card.rank}_${card.suit}`;
                 });
-                if (game_over) {
-                    ws.send(JSON.stringify({ type: 'game_over', event: "bridge" }));
-                    game_over = false;
+
+                await animatePlayedCard(cardDiv);
+            } else {
+                const playerTopContainer = document.getElementById(currentPlayer);
+                const cardImg = playerTopContainer.querySelector(".opponent_card img");
+
+                await animatePlayedCard(cardImg);
+            }
+
+            updateRightCard(card);
+
+            if (whose === "current") {
+                if (card.rank === "J") {
+                    showJackWidget(card);
                 } else {
-                    ws.send(JSON.stringify({type: 'drew_card'}));
+                    ws.send(JSON.stringify({ type: "played_card", card: card, chosen_suit: null }));
                 }
             }
         }
 
 
+        function updateRightCard(card) {
+            const oldImage = elements.rightCard.querySelector("img");
+            if (oldImage) oldImage.remove();
+
+            const newCardImage = document.createElement("img");
+            newCardImage.src = `/static/cards/${card.rank}_${card.suit}.png`;
+            newCardImage.alt = `${card.rank}_${card.suit}`;
+            elements.rightCard.appendChild(newCardImage);
+        }
+
+
+        async function animatePlayedCard(cardElement) {
+            const startRect = cardElement.getBoundingClientRect();
+            const endRect = elements.rightCard.getBoundingClientRect();
+
+            const cardClone = cardElement.cloneNode(true);
+            document.body.appendChild(cardClone);
+
+            cardClone.style.position = "absolute";
+            cardClone.style.left = `${startRect.left}px`;
+            cardClone.style.top = `${startRect.top}px`;
+            cardClone.style.width = `${startRect.width}px`;
+            cardClone.style.height = `${startRect.height}px`;
+            cardClone.style.transition = "all 0.35s ease";
+
+            setTimeout(() => {
+                cardElement.style.display = "none";
+                cardClone.style.left = `${endRect.left}px`;
+                cardClone.style.top = `${endRect.top}px`;
+                cardClone.style.width = "90px";
+                cardClone.style.height = "135px";
+            }, 30);
+
+            await new Promise((resolve) => {
+                setTimeout(() => {
+                    if (document.body.contains(cardClone)) {
+                        cardClone.remove();
+                    }
+                    resolve();
+                }, 370);
+            });
+        }
+
+
+        async function drawCard() {
+            ws.send(JSON.stringify({ type: "show_my_move" }));
+
+            await animateDrawCard("current");
+
+            if (game_over) {
+                ws.send(JSON.stringify({ type: "game_over" }));
+                game_over = false;
+            } else {
+                ws.send(JSON.stringify({ type: "drew_card" }));
+            }
+
+        }
+
+
+        async function animateDrawCard(whose) {
+            const startRect = elements.leftCard.getBoundingClientRect();
+            const cardClone = elements.leftCard.querySelector("img").cloneNode(true);
+
+            document.body.appendChild(cardClone);
+
+            cardClone.style.position = "absolute";
+            cardClone.style.left = `${startRect.left}px`;
+            cardClone.style.top = `${startRect.top}px`;
+            cardClone.style.width = `${startRect.width}px`;
+            cardClone.style.height = `${startRect.height}px`;
+            cardClone.style.transition = "all 0.35s ease";
+
+            setTimeout(() => {
+                let endRect;
+                let centerX, centerY;
+
+                if (whose === "current") {
+                    endRect = elements.playerHand.getBoundingClientRect();
+                    centerX = endRect.left + (endRect.width / 2) - (startRect.width / 2);
+                    centerY = endRect.bottom - startRect.height - 10;
+                    cardClone.style.width = `${startRect.width}px`;
+                    cardClone.style.height = `${startRect.height}px`;
+                } else {
+                    const opponentContainer = document.getElementById(`${currentPlayer}_hand`);
+                    const cardImg = opponentContainer.querySelector(".opponent_card");
+                    endRect = cardImg.getBoundingClientRect();
+                    centerX = endRect.left;
+                    centerY = endRect.top;
+                    cardClone.style.width = "20px";
+                    cardClone.style.height = "30px";
+                }
+
+                cardClone.style.left = `${centerX}px`;
+                cardClone.style.top = `${centerY}px`;
+            }, 30);
+
+            await new Promise((resolve) => {
+                setTimeout(() => {
+                    if (document.body.contains(cardClone)) {
+                        cardClone.remove();
+                    }
+                    resolve();
+                }, 370);
+            });
+        }
+
+
         function skip_turn() {
             if (currentPlayer === userId) {
-                ws.send(JSON.stringify({type: 'skip_turn'}));
+                ws.send(JSON.stringify({ type: "skip_turn" }));
 
                 elements.errorMessage.style.display = "none";
             }
@@ -553,56 +765,56 @@
 
 
         function colorSkipTurn() {
-            const rightCardImage = document.querySelector('#rightCard img');
+            const rightCardImage = document.querySelector("#rightCard img");
             if (currentPlayer === userId) {
-                rightCardImage.classList.add('highlighted-card-img');
+                rightCardImage.classList.add("highlighted-card-img");
             }
         }
 
 
         function colorDrawCard() {
-            const leftCardImage = document.querySelector('#leftCard img');
+            const leftCardImage = document.querySelector("#leftCard img");
             if (currentPlayer === userId) {
-                leftCardImage.classList.add('highlighted-card-img');
+                leftCardImage.classList.add("highlighted-card-img");
             }
         }
 
 
         function firstTurn(card) {
             if (currentPlayer === userId) {
-                if (card.rank === 'J') {
+                if (card.rank === "J") {
                     showJackWidget(card)
                 } else {
-                    ws.send(JSON.stringify({type: 'played_card', card: card, chosen_suit: null }));
+                    ws.send(JSON.stringify({ type: "played_card", card: card, chosen_suit: null }));
                 }
             }
         }
 
 
         function showJackWidget(card) {
-            elements.jackWidget.style.display = 'block';
+            elements.jackWidget.style.display = "block";
 
-            const playerCards = elements.playerHand.querySelectorAll('.card');
+            const playerCards = elements.playerHand.querySelectorAll(".card");
             playerCards.forEach(cardDiv => {
                 cardDiv.onclick = null;
-                cardDiv.style.cursor = 'default';
-                cardDiv.style.bottom = '50px';
-                cardDiv.classList.remove('highlighted-card-img');
+                cardDiv.style.cursor = "default";
+                cardDiv.style.bottom = "10px";
+                cardDiv.classList.remove("highlighted-card-img");
             });
 
-            const suits = ['♠', '♥', '♦', '♣'];
-            const cells = document.querySelectorAll('.jack-widget-grid div');
+            const suits = ["♠", "♥", "♦", "♣"];
+            const cells = document.querySelectorAll(".jack-widget-grid div");
 
             cells.forEach((cell, index) => {
                 let newCell = cell.cloneNode(true);
                 cell.replaceWith(newCell);
 
-                newCell.addEventListener('click', function() {
+                newCell.addEventListener("click", function() {
                     const selectedSuit = suits[index];
 
-                    elements.jackWidget.style.display = 'none';
+                    elements.jackWidget.style.display = "none";
 
-                    ws.send(JSON.stringify({ type: 'played_card', card: card, chosen_suit: selectedSuit }));
+                    ws.send(JSON.stringify({ type: "played_card", card: card, chosen_suit: selectedSuit }));
                 });
             });
         }
@@ -615,19 +827,21 @@
             if (currentPlayer === userId) {
                 if (playerOptions.must_draw) {
                     colorDrawCard();
-                    elements.leftCard.style.cursor = 'pointer';
+                    elements.leftCard.style.cursor = "pointer";
                     elements.leftCard.onclick = drawCard;
                 } else if (playerOptions.must_skip) {
                     colorSkipTurn();
-                    elements.rightCard.style.cursor = 'pointer';
+                    elements.rightCard.style.cursor = "pointer";
                     elements.rightCard.onclick = skip_turn;
                 } else {
                     if (playerOptions.can_draw) {
-                        elements.leftCard.style.cursor = 'pointer';
+                        colorDrawCard();
+                        elements.leftCard.style.cursor = "pointer";
                         elements.leftCard.onclick = drawCard;
                     }
                     if (playerOptions.can_skip) {
-                        elements.rightCard.style.cursor = 'pointer';
+                        colorSkipTurn();
+                        elements.rightCard.style.cursor = "pointer";
                         elements.rightCard.onclick = skip_turn;
                     }
                 }
@@ -636,42 +850,46 @@
 
 
         function setDefaultDrawCard() {
-            const leftCardImage = document.querySelector('#leftCard img');
-            if (currentPlayer === userId && leftCardImage) {
-                leftCardImage.classList.remove('highlighted-card-img');
+            if (currentPlayer === userId) {
+                removeHighlighted("#leftCard img");
             }
-            elements.leftCard.style.cursor = 'default';
+            elements.leftCard.style.cursor = "default";
             elements.leftCard.onclick = null;
         }
 
 
         function setDefaultSkipTurn() {
-            const rightCardImage = document.querySelector('#rightCard img');
-            if (currentPlayer === userId && rightCardImage) {
-                rightCardImage.classList.remove('highlighted-card-img');
+            if (currentPlayer === userId) {
+                removeHighlighted("#rightCard img");
             }
-            elements.rightCard.style.cursor = 'default';
+            elements.rightCard.style.cursor = "default";
             elements.rightCard.onclick = null;
         }
 
 
+        function removeHighlighted(img) {
+            const object = document.querySelector(img);
+            object.classList.remove("highlighted-card-img");
+        }
+
+
         async function showRulesWidget() {
-            const response = await fetch('/rules');
+            const response = await fetch("/rules");
             const data = await response.json();
 
-            document.querySelector('.rules-column p').innerHTML = data.rules;
+            document.querySelector(".rules-column p").innerHTML = data.rules;
 
-            elements.rulesWidget.style.display = 'flex';
+            elements.rulesWidget.style.display = "flex";
 
             if (!eventHandlersAdded) {
-                document.getElementById('closeRulesWidget').addEventListener('click', closeRulesWidget);
-                document.getElementById('rules-widget').addEventListener('click', function(event) {
+                document.getElementById("closeRulesWidget").addEventListener("click", closeRulesWidget);
+                document.getElementById("rules-widget").addEventListener("click", function(event) {
                     if (event.target === elements.rulesWidget) {
                         closeRulesWidget();
                     }
                 });
-                document.addEventListener('keydown', function(event) {
-                    if (event.key === 'Escape') {
+                document.addEventListener("keydown", function(event) {
+                    if (event.key === "Escape") {
                         closeRulesWidget();
                     }
                 });
@@ -682,54 +900,93 @@
 
 
         function closeRulesWidget() {
-            elements.rulesWidget.style.display = 'none';
-            document.querySelector('.rules-column p').textContent = '';
+            elements.rulesWidget.style.display = "none";
+            document.querySelector(".rules-column p").textContent ="";
         }
 
 
-        async function backToHomePage(message) {
-            await showError(message, 5);
-            window.location.href = 'http://localhost:8000';
+        async function backToHomePage(message, seconds) {
+            await showError(message, seconds);
+            window.location.href = "http://localhost:8000";
         }
 
 
-        function checkScoresRate(scoresRate, scoresRateUp) {
-            elements.scoresRate.innerHTML = `${scoresRate}`;
+        function checkScoresRate(scoresRate) {
+            if (scoresRate !== elements.scoresRate.innerHTML) {
+                elements.scoresRate.innerHTML = scoresRate;
+                elements.scoresRate.classList.add("wave-effect");
 
-            if (scoresRateUp) {
-                showError(scoresRate, 2);
+                setTimeout(() => {
+                    elements.scoresRate.classList.remove("wave-effect");
+                }, 5000);
             }
         }
 
 
+        function startNewGame() {
+            ws.send(JSON.stringify({ type: "reset_game" }));
+        }
+
+
+        function reset_game(playerScores) {
+            closeGameOverWidget();
+            elements.pS.textContent = playerScores;
+            elements.scoresRate.innerHTML = "x1";
+        }
+
+
         function isItBridge(card) {
-            elements.leftCard.querySelector("img").src = "/static/cards/bridge.png";
-            elements.leftCard.querySelector("img").alt = "bridge";
-            elements.leftCard.style.cursor = "pointer";
-            colorDrawCard()
+            setTimeout(() => {
+                elements.leftCard.querySelector("img").src = "/static/cards/bridge.png";
+                elements.leftCard.querySelector("img").alt = "bridge";
+                elements.leftCard.style.cursor = "pointer";
+                colorDrawCard();
 
-            elements.leftCard.onclick = () => {
-                ws.send(JSON.stringify({ type: 'game_over', event: "bridge" }));
-                resetCardState(card);
-            };
+                elements.leftCard.onclick = () => {
+                    ws.send(JSON.stringify({ type: "game_over" }));
+                    resetCardState(card);
+                };
 
-            elements.rightCard.querySelector("img").src = "/static/cards/continue.png";
-            elements.rightCard.querySelector("img").alt = "continue";
+                elements.rightCard.querySelector("img").src = "/static/cards/continue.png";
+                elements.rightCard.querySelector("img").alt = "continue";
 
-            elements.rightCard.onclick = () => {
-                skip_turn()
-                resetCardState(card);
-            };
+                elements.rightCard.onclick = () => {
+                    skip_turn();
+                    resetCardState(card);
+                };
+            }, 50);
+
+
         }
 
 
         function resetCardState(card) {
             elements.leftCard.querySelector("img").src = "/static/cards/closed_card.png";
             elements.leftCard.querySelector("img").alt = "closed_card";
-            setDefaultDrawCard()
+            setDefaultDrawCard();
 
             elements.rightCard.querySelector("img").src = `/static/cards/${card.rank}_${card.suit}.png`;
             elements.rightCard.querySelector("img").alt = `${card.rank}_${card.suit}`;
+            setDefaultSkipTurn();
+        }
+
+
+        function showGameOverWidget(results, playersScores, playerScores) {
+            playersScores.forEach(player => {
+                const oS = document.getElementById(`${player.player_id}_oS`);
+                oS.textContent = player.scores;
+            })
+
+            elements.pS.textContent = playerScores;
+
+            document.querySelector(".results-column p").innerHTML = results;
+            elements.gameOverWidget.style.display = "flex";
+        }
+
+
+        function closeGameOverWidget() {
+            elements.gameOverWidget.style.display = "none";
+            document.querySelector(".results-column p").textContent ="";
         }
     </script>
 
