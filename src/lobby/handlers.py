@@ -4,7 +4,6 @@ from fastapi import WebSocket
 
 from src.user.models import User
 from src.lobby.models import Lobby
-from src.connection.manager import ConnectionManager
 
 
 
