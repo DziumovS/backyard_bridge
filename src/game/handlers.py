@@ -260,8 +260,7 @@ class EventHandler:
                 chosen_suit=game.chosen_suit
             )
 
-        if (current_player.options.must_skip and not current_player.options.must_draw or
-                card.rank in ("6", "J")):
+        if current_player.options.must_skip and not current_player.options.must_draw or card.rank in ("6", "J"):
             if game.is_it_bridge(card=card):
                 message = "You have played the 4-th card in a row of the same value. Would you say bridge?"
                 await self.gm.connection_manager.send_message(
