@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 from fastapi import WebSocket
 
-from src.connection.manager import ConnectionManager
 from src.user.models import Player
 from src.deck.models import Card, Deck
+from src.game.handlers import CardHandler
 
 
 @dataclass
@@ -15,13 +15,17 @@ class FourOfAKindTracker:
     count: int = 0
 
     def checking(self, card_rank: str) -> bool:
-        if card_rank != self.current_rank:
+        if card_rank == self.current_rank:
+            self.count = 1 if self.count == 4 else self.count + 1
+        else:
             self.current_rank = card_rank
             self.count = 1
-        else:
-            self.count += 1
 
         return self.count == 4 and self.current_rank != "6"
+
+    def reset(self):
+        self.current_rank = None
+        self.count = 0
 
 
 class Game:
@@ -35,6 +39,7 @@ class Game:
         self.four_of_a_kind_tracker: FourOfAKindTracker = FourOfAKindTracker()
         self.last_cards_j = {}
         self.why_end = None
+        self.card_handler = CardHandler(game_instance=self)
 
         for player in self.players:
             for _ in range(5):
@@ -45,6 +50,32 @@ class Game:
     def __del__(self):
         print(f"Game '{self.game_id}' has been deleted.")
 
+    def reset_game(self):
+        self.deck = Deck()
+        self.is_active = True
+        self.current_player_index = 0
+        self.chosen_suit = None
+        self.four_of_a_kind_tracker.reset()
+        self.last_cards_j = {}
+        self.why_end = None
+
+        self.shuffle_players(players=self.players)
+
+        if any(player.scores > 125 for player in self.players):
+            self.reset_players_scores()
+
+        for player in self.players:
+            player.reset_hand()
+            player.set_default_options()
+            for _ in range(5):
+                player.draw_card(self.deck)
+
+        self.current_card = self.card_distribution()
+
+    def reset_players_scores(self):
+        for player in self.players:
+            player.reset_score()
+
     def calculate_scores(self):
         points_mapping = {
             "10": 10,
@@ -52,6 +83,8 @@ class Game:
             "K": 10,
             "A": 15
         }
+
+        result = []
 
         for player in self.players:
             points = 0
@@ -68,10 +101,13 @@ class Game:
                 player.scores -= ((self.last_cards_j[player.user_id] * points_mapping["J"]) * self.deck.scores_rate)
             player.scores = 0 if player.scores == 125 else player.scores
 
+            result.append({"player_id": player.user_id, "scores": player.scores})
+
+        return result
+
     def get_players_game_results(self):
-        players_scores = []
-        losers = []
-        winners = []
+        players_scores, losers, winners = [], [], []
+
         for player in self.players:
             player_info = {"player": player.user_name, "scores": player.scores}
             players_scores.append(player_info)
@@ -103,14 +139,6 @@ class Game:
         if player in self.players:
             self.players.remove(player)
 
-    def get_players(self) -> List[Dict]:
-        return [
-            {
-                "user_id": player.user_id,
-                "user_name": player.user_name
-            } for player in self.players
-        ]
-
     def is_current_player(self, player_id: str) -> bool:
         current_player = self.players[self.current_player_index]
         return current_player.user_id == player_id
@@ -127,91 +155,9 @@ class Game:
     def next_player(self):
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
 
-    def end_game(self):
-        self.is_active = False
-        print(f"Game {self.game_id} has ended.")
-
     def remove_played_card(self, current_player: Player, card: Card | None):
         current_player.hand.remove(self.current_card)
         self.deck.insert_to_bounce_deck(previous_card=card)
-
-    def handle_card_six(self, current_player: Player):
-        decks_empty = self.deck.is_decks_empty()
-        playable_cards = current_player.get_playable_cards(
-            current_card=self.current_card,
-            chosen_suit=self.chosen_suit,
-        )
-        if playable_cards:
-            current_player.options.can_skip = False
-            current_player.options.can_draw = not decks_empty
-        else:
-            current_player.options.must_draw = 0 if decks_empty else current_player.options.must_draw + 1
-
-    def _handle_card_six(self, current_player: Player, card: Card):
-        self.remove_played_card(current_player=current_player, card=card)
-
-        self.handle_card_six(current_player=current_player)
-
-    def _handle_card_seven(self, current_player: Player, card: Card):
-        self.remove_played_card(current_player=current_player, card=card)
-        current_player.options.must_skip = True
-
-        next_player = self.get_next_player()
-        next_player.set_default_options()
-        next_player.options.must_draw += 1
-
-    def _handle_card_eight(self, current_player: Player, card: Card):
-        self.remove_played_card(current_player=current_player, card=card)
-        current_player.options.must_skip = True
-
-        next_player = self.get_next_player()
-        next_player.set_default_options()
-        next_player.options.must_draw += 2
-        next_player.options.must_skip = True
-
-    def _handle_card_jack(self, current_player: Player, card: Card):
-        self.remove_played_card(current_player=current_player, card=card)
-        current_player.options.can_draw = False
-        current_player.options.can_skip = True
-
-        if current_player.user_id not in self.last_cards_j:
-            self.last_cards_j[current_player.user_id] = 1
-        else:
-            self.last_cards_j[current_player.user_id] += 1
-
-        if not current_player.get_playable_cards(current_card=self.current_card, j=True):
-            current_player.options.must_skip = True
-
-        next_player = self.get_next_player()
-        next_player.set_default_options()
-
-    def _handle_card_ace(self, current_player: Player, card: Card):
-        self.remove_played_card(current_player=current_player, card=card)
-        current_player.options.must_skip = True
-
-        next_player = self.get_next_player()
-        next_player.set_default_options()
-        next_player.options.must_skip = True
-
-    def _handle_normal_card(self, current_player: Player, card: Card):
-        self.remove_played_card(current_player=current_player, card=card)
-        current_player.set_default_options()
-        current_player.options.must_skip = True
-
-    def handle_special_cards(self, current_player: Player, card: Card):
-        match self.current_card.rank:
-            case "6":
-                self._handle_card_six(current_player=current_player, card=card)
-            case "7":
-                self._handle_card_seven(current_player=current_player, card=card)
-            case "8":
-                self._handle_card_eight(current_player=current_player, card=card)
-            case "J":
-                self._handle_card_jack(current_player=current_player, card=card)
-            case "A":
-                self._handle_card_ace(current_player=current_player, card=card)
-            case _:
-                self._handle_normal_card(current_player=current_player, card=card)
 
     def get_game_over_message(self, current_player: Player):
         players_scores, losers, winners = self.get_players_game_results()
