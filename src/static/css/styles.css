@@ -1,5 +1,12 @@
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
 h1 {
     margin: 10px 0 10px 5px;
+    text-shadow: 2px 2px 5px rgba(108, 108, 108, 0.7);
 }
 
 h2 {
@@ -20,18 +27,95 @@ p {
     margin: 0;
 }
 
+.users-data {
+    display: flex;
+    align-items: normal;
+    justify-content: space-evenly;
+    flex-direction: column;
+}
+
+.name-and-scores {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    flex-direction: column;
+    font-size: 14px;
+}
+
 .name-container {
     display: inline-flex;
     align-items: center;
-    margin: 6px 0 0 5px;
+    margin: 6px 0 0 0;
     outline: none;
-    font-size: 16px;
+}
+
+.hidden {
+    display: none;
+    margin-left: 5px;
 }
 
 .name-form {
     display: inline-flex;
     align-items: center;
     margin-left: 5px;
+}
+
+p#scores {
+    margin: 6px 0 0 0;
+}
+
+.users-list {
+    display: flex;
+    justify-content: space-around;
+    flex-direction: column;
+}
+
+.usersHeader {
+    list-style-type: none;
+    padding: 0;
+    margin: 5px 0 0 0;
+    text-align: center;
+    display: none;
+}
+
+.usersContainer {
+    display: flex;
+    justify-content: space-evenly;
+    flex-wrap: wrap;
+    flex-direction: column;
+    font-size: 16px;
+}
+
+.opponentScores {
+    display: none;
+}
+
+.opponent_hand {
+    width: 100px;
+    height: 30px;
+    justify-content: center;
+    align-items: normal;
+    display: none;
+    flex-direction: row;
+    position: relative;
+}
+
+.opponent_hand img {
+    height: 100%;
+    width: auto;
+}
+
+.opponent_card {
+    position: absolute;
+}
+
+.opponent_card img {
+    width: 20px;
+    object-fit: cover;
+}
+
+#ws-id, #pS {
+    font-weight: bold;
 }
 
 input[type="text"],
@@ -52,7 +136,7 @@ input[type="text"],
 input[type="number"],
 input[type="text"]:focus,
 input[type="number"]:focus {
-    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+    font-family: 'Times New Roman', Times, serif;
     background-color: #d8dbe2;
     color: black;
     border: 3px solid rgb(125 125 125 / 70%);
@@ -74,41 +158,38 @@ input[type="number"]:focus {
     box-shadow: 0 0 10px 5px rgba(255, 165, 0, 0.7);
 }
 
-.hidden {
-    display: none;
-    margin-left: 5px;
-}
-
 .name-input {
     margin-right: 5px;
     width: 130px;
 }
 
 button {
-    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+    font-family: 'Times New Roman', Times, serif;
     background-color: #f5f6f7;
     color: black;
     border: 3px solid rgb(125 125 125 / 70%);
     border-radius: 20px;
     height: 45px;
-    width: 140px;
-    font-size: 18px;
+    width: 130px;
+    font-size: 16px;
     cursor: pointer;
     box-shadow: 2px 2px 5px 2px rgb(108 108 108 / 70%);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 #changeName {
-    height: 30px;
-    width: 105px;
-    font-size: 16px;
+    height: 35px;
+    width: 120px;
+    font-size: 14px;
+    font-weight: normal;
 }
 
 #rulesButton {
-    height: 25px;
-    width: 80px;
+    display: block;
+    height: 35px;
+    width: 100px;
     font-size: 16px;
-    margin: 0 0 5px 5px;
+    margin: 10px 5px 10px 0;
 }
 
 button:hover {
@@ -152,17 +233,21 @@ button:active {
     width: 95%;
     margin: 10px 0 0 0;
     text-align: center;
-    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+    font-family: 'Times New Roman', Times, serif;
     color: red;
     font-size: 20px;
     z-index: 3;
 }
 
-.buttonContainer {
+.buttonContainer, .gameOverButtons {
     display: flex;
     justify-content: space-around;
     width: 100%;
     margin-top: 10px;
+}
+
+.gameOverButtons {
+    margin-bottom: 10px;
 }
 
 #startButton:disabled, #joinLobbyButton:disabled, #changeName:disabled {
@@ -173,7 +258,8 @@ button:active {
     box-shadow: none;
 }
 
-.rules-widget-window {
+.rules-widget-window, .game-over-widget-window {
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
@@ -185,9 +271,9 @@ button:active {
     z-index: 1;
 }
 
-.rules-widget-content {
+.rules-widget-content, .game-over-widget-content {
     background-color: rgba(255, 240, 212, 1);
-    width: 80vw;
+    width: min(80vw, 55vh);
     overflow-y: auto;
     position: relative;
     border-radius: 20px;
@@ -198,14 +284,14 @@ button:active {
     position: absolute;
     top: 0;
     right: 0;
-    padding: 0 12px 0 12px;
+    padding: 0 8px 0 8px;
     cursor: pointer;
-    font-size: 40px;
+    font-size: 25px;
     color: white;
     font-weight: bold;
     border-radius: 50%;
-    background-color: black;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    background-color: #00000042;
+    box-shadow: 0 0 13px 15px rgba(0, 0, 0, 0.3);
     transition: background-color 0.2s ease;
     z-index: 2;
 }
@@ -214,29 +300,28 @@ button:active {
     background-color: #ddd;
 }
 
-.rules-column {
+.rules-column, .results-column {
     padding: 10px;
     overflow-y: auto;
     max-height: 60vh;
     font-size: 13px;
 }
 
-.rules-widget-content::-webkit-scrollbar {
+.results-column {
+    text-align: center;
+}
+
+.rules-widget-content::-webkit-scrollbar, .game-over-widget-content::-webkit-scrollbar {
     width: 8px;
 }
 
-.rules-widget-content::-webkit-scrollbar-thumb {
+.rules-widget-content::-webkit-scrollbar-thumb, .game-over-widget-content::-webkit-scrollbar-thumb {
     background-color: #ccc;
     border-radius: 4px;
 }
 
-#usersHeader {
-    margin-left: 5px;
-    display: none;
-}
-
-#users {
-    padding: 0 0 0 23px;
+#cardsInHand {
+    padding: 0 0 0 0;
     margin: 0 0 0 0;
 }
 
@@ -248,12 +333,12 @@ button:active {
     flex-direction: column;
     align-items: center;
     padding-bottom: 20px;
-    height: 260px;
+    height: 195px;
 }
 
 .turnText {
-    font-size: 35px;
-    color: white;
+    font-size: 18px;
+    color: black;
     z-index: 1;
     text-align: center;
 }
@@ -264,10 +349,10 @@ button:active {
     justify-content: center;
     align-items: flex-end;
     background-color: #d8dbe2;
-    padding: 10px 0 50px 0;
+    padding: 10px 0 10px 0;
     box-sizing: border-box;
     overflow: hidden;
-    height: 235px;
+    height: 195px;
     position: fixed;
     bottom: 0;
 }
@@ -301,12 +386,12 @@ button:active {
     left: 50%;
     transform: translate(-50%, -50%);
     width: 100%;
-    max-width: 330px;
+    max-width: 345px;
     height: 150px;
     background-color: #d8dbe2;
     padding: 20px;
     box-sizing: border-box;
-    gap: 10px;
+    gap: 17px;
 }
 
 .current-card {
@@ -324,7 +409,7 @@ button:active {
     justify-content: space-between;
 }
 
-#cards-left, #scoresRate {
+#cards-left, #scores-rate-now {
     text-align: center;
     cursor: default;
 }
@@ -335,6 +420,38 @@ button:active {
     font-weight: bold;
     font-size: 20px;
     cursor: default;
+}
+
+.scores-rate {
+    position: relative;
+}
+
+.scores-rate::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    background-color: rgb(255, 165, 0);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+}
+
+.wave-effect::after {
+    animation: wave 0.7s ease-out 5;
+}
+
+@keyframes wave {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(6);
+        opacity: 0;
+    }
 }
 
 .suit-symbol {
@@ -361,8 +478,8 @@ button:active {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 50vw;
-    height: 50vw;
+    width: min(55vw, 55vh);
+    height: min(55vw, 55vh);
     background-color: rgba(255, 240, 212, 1);
     border-radius: 20px;
     box-shadow: 0 0 30px 20px rgba(255, 165, 0, 0.7);
@@ -409,6 +526,8 @@ button:active {
     padding: 0;
     text-align: center;
     cursor: pointer;
+    aspect-ratio: 1;
+    font-size: clamp(40px, 20vw, 150px);
 }
 
 .jack-widget-cell-1, .jack-widget-cell-4 {
@@ -420,8 +539,9 @@ button:active {
 }
 
 .jack-widget-window p {
-    font-size: 90px;
+    font-size: inherit;
     margin: 0;
+    line-height: 1;
 }
 
 footer {
