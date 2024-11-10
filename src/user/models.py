@@ -51,10 +51,6 @@ class Player(User):
     def draw_card(self, deck: Deck):
         self.hand.append(deck.draw_card())
 
-    def play_card(self, card: Card, current_card: Card, chosen_suit: dict | None = None) -> bool:
-        if card.can_play_on(current_card=current_card, chosen_suit=chosen_suit):
-            self.hand.remove(card)
-
     def get_playable_cards(self, current_card: Card, chosen_suit: dict | None = None, to_dict: bool = False,
                            j: bool = False) -> List[Dict | Card]:
         return [
@@ -78,3 +74,9 @@ class Player(User):
 
     def has_won(self, card: Card) -> bool:
         return len(self.hand) == 0 and card.rank != "6"
+
+    def reset_hand(self):
+        self.hand = []
+
+    def reset_score(self):
+        self.scores = 0
