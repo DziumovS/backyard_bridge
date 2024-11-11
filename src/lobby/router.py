@@ -2,6 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from src.connection.manager import ConnectionManager
+from src.enums.lobby import EventType
 from src.lobby.rules_txt import rules
 from src.lobby.manager import LobbyManager
 from src.game.manager import GameManager
@@ -45,20 +46,20 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                 user.user_name = data["user_name"]
 
             match data["type"]:
-                case "create_lobby":
+                case EventType.CREATE_LOBBY.value:
                     await lobby_manager.handlers.handle_create_lobby(user=user, websocket=websocket)
 
-                case "close_lobby":
+                case EventType.CLOSE_LOBBY.value:
                     lobby = lobby_manager.get_lobby_by_user_id(user_id=user_id)
                     if lobby:
                         await lobby_manager.handlers.handle_disconnect_lobby(user_id=user_id)
                     break
 
-                case "join_lobby":
+                case EventType.JOIN_LOBBY.value:
                     lobby_id = data.get("lobby_id")
                     await lobby_manager.handlers.handle_join_lobby(user=user, websocket=websocket, lobby_id=lobby_id)
 
-                case "start_game":
+                case EventType.START_GAME.value:
                     game_data = await lobby_manager.handlers.handle_start_game(user_id=user_id)
                     game_id, players = game_data
                     game = Game(game_id=game_id, players=players)

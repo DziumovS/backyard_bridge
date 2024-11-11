@@ -240,7 +240,7 @@
 
         function createLobby() {
             setLobbyUI(true);
-            initializeWebSocket("create_lobby", { user_name: userName });
+            initializeWebSocket("crl", { user_name: userName });
         }
 
 
@@ -253,7 +253,7 @@
 
             if (data.exists) {
                 setLobbyUI(false);
-                initializeWebSocket("join_lobby", { user_name: userName, lobby_id: inputLobbyId });
+                initializeWebSocket("jl", { user_name: userName, lobby_id: inputLobbyId });
             } else {
                 await showError(data.msg, 2);
             }
@@ -264,7 +264,9 @@
             if (ws) {
                 ws.close(1000);
             }
-            ws = new WebSocket(`wss://${window.location.hostname}/ws/lobby/${userId}`);
+
+            // ws = new WebSocket(`wss://${window.location.hostname}/ws/lobby/${userId}`);  // https
+            ws = new WebSocket(`ws://localhost:8000/ws/lobby/${userId}`);  // http
 
             ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
 
@@ -276,87 +278,87 @@
             const data = JSON.parse(event.data);
 
             switch (data.type) {
-                case "lobby_created":
+                case "lcr":
                     lobbyId = data.lobby_id;
                     elements.lobbyMessage.innerHTML = data.msg;
                     break;
 
-                case "joined_lobby":
+                case "jdl":
                     lobbyId = data.lobby_id;
                     elements.lobbyMessage.innerHTML = data.msg;
                     updateUsers(data.users, false);
                     break;
 
-                case "users_update":
+                case "uu":
                     updateUsers(data.users, data.is_host);
                     break;
 
-                case "start_game":
+                case "sg":
                     startGame();
                     break;
 
-                case "lobby_closed":
+                case "lcl":
                     returnToMainPage();
                     break;
 
-                case "toggle_start_button":
+                case "tsb":
                     toggleStartButton(data.enable);
                     break;
 
-                case "game_data":
+                case "gd":
                     checkScoresRate(data.scores_rate);
                     updatePlayerHand(data.hand, data.current_player, data.playable_cards, "current");
                     updateOpponentData(data.players_hands);
                     updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit, data.player_options);
                     break;
 
-                case "whose_turn":
+                case "wt":
                     whoseTurn(data.msg, data.current_player);
                     break;
 
-                case "first_turn":
+                case "ft":
                     firstTurn(data.current_card);
                     break;
 
-                case "not_enough_players":
+                case "nep":
                     backToHomePage(data.msg, 3);
                     break;
 
-                case "show_error":
+                case "se":
                     showError(data.msg, 2);
                     break;
 
-                case "is_it_bridge":
+                case "iib":
                     showError(data.msg, 4);
                     isItBridge(data.current_card);
                     break;
 
-                case "game_over":
+                case "go":
                     removeHighlighted("#leftCard img");
                     showError(data.error_msg, 5).then(() => {
                         showGameOverWidget(data.widget_msg, data.players_scores, data.player_scores);
                     });
                     break;
 
-                case "game_over_draw_card":
+                case "godc":
                     game_over = true;
                     drawCard();
                     break;
 
-                case "leave_game":
+                case "lg":
                     leaveGame(data.player_id);
                     break;
 
-                case "animate_played_card":
+                case "apc":
                     playCard(data.card, "opponent");
                     break;
 
-                case "animate_draw_card":
+                case "adc":
                     change_player(data.current_player);
                     animateDrawCard("opponent");
                     break;
 
-                case "game_reset":
+                case "gr":
                     reset_game(data.player_scores);
                     break;
             }
@@ -381,12 +383,13 @@
 
         function startGame() {
             if (isHost) {
-                ws.send(JSON.stringify({ type: "start_game" }));
+                ws.send(JSON.stringify({ type: "sg" }));
             }
-            console.log(`${window.location.origin}`)
-            ws = new WebSocket(`wss://${window.location.hostname}/ws/game/${lobbyId}/${userId}`);
 
-            ws.onopen = () => ws.send(JSON.stringify({ type: "game_started" }));
+            // ws = new WebSocket(`wss://${window.location.hostname}/ws/game/${lobbyId}/${userId}`);  // https
+            ws = new WebSocket(`ws://localhost:8000/ws/game/${lobbyId}/${userId}`);  // http
+
+            ws.onopen = () => ws.send(JSON.stringify({ type: "gs" }));
             ws.onmessage = function (event) {
                 handleWebSocketMessage(event);
             };
@@ -427,7 +430,7 @@
 
 
         function leaveLobby() {
-            ws.send(JSON.stringify({ type: "close_lobby", lobby_id: lobbyId }));
+            ws.send(JSON.stringify({ type: "cll", lobby_id: lobbyId }));
 
             returnToMainPage();
         }
@@ -620,7 +623,7 @@
 
         async function playCard(card, whose) {
             if (whose === "current") {
-                ws.send(JSON.stringify({ type: "show_my_move", card: card }));
+                ws.send(JSON.stringify({ type: "smm", card: card }));
 
                 const cardDiv = [...elements.playerHand.children].find(cardElement => {
                     const img = cardElement.querySelector('img');
@@ -641,7 +644,7 @@
                 if (card.rank === "J") {
                     showJackWidget(card);
                 } else {
-                    ws.send(JSON.stringify({ type: "played_card", card: card, chosen_suit: null }));
+                    ws.send(JSON.stringify({ type: "pc", card: card, chosen_suit: null }));
                 }
             }
         }
@@ -692,15 +695,15 @@
 
 
         async function drawCard() {
-            ws.send(JSON.stringify({ type: "show_my_move" }));
+            ws.send(JSON.stringify({ type: "smm" }));
 
             await animateDrawCard("current");
 
             if (game_over) {
-                ws.send(JSON.stringify({ type: "game_over" }));
+                ws.send(JSON.stringify({ type: "go" }));
                 game_over = false;
             } else {
-                ws.send(JSON.stringify({ type: "drew_card" }));
+                ws.send(JSON.stringify({ type: "dc" }));
             }
 
         }
@@ -756,7 +759,7 @@
 
         function skip_turn() {
             if (currentPlayer === userId) {
-                ws.send(JSON.stringify({ type: "skip_turn" }));
+                ws.send(JSON.stringify({ type: "st" }));
 
                 elements.errorMessage.style.display = "none";
             }
@@ -784,7 +787,7 @@
                 if (card.rank === "J") {
                     showJackWidget(card)
                 } else {
-                    ws.send(JSON.stringify({ type: "played_card", card: card, chosen_suit: null }));
+                    ws.send(JSON.stringify({ type: "pc", card: card, chosen_suit: null }));
                 }
             }
         }
@@ -813,7 +816,7 @@
 
                     elements.jackWidget.style.display = "none";
 
-                    ws.send(JSON.stringify({ type: "played_card", card: card, chosen_suit: selectedSuit }));
+                    ws.send(JSON.stringify({ type: "pc", card: card, chosen_suit: selectedSuit }));
                 });
             });
         }
@@ -906,7 +909,8 @@
 
         async function backToHomePage(message, seconds) {
             await showError(message, seconds);
-            window.location.href = `${window.location.origin}`;
+            // window.location.href = `${window.location.origin}`;  // https
+            window.location.href = "http://localhost:8000";  // http
         }
 
 
@@ -923,7 +927,7 @@
 
 
         function startNewGame() {
-            ws.send(JSON.stringify({ type: "reset_game" }));
+            ws.send(JSON.stringify({ type: "rg" }));
         }
 
 
@@ -942,7 +946,7 @@
                 colorDrawCard();
 
                 elements.leftCard.onclick = () => {
-                    ws.send(JSON.stringify({ type: "game_over" }));
+                    ws.send(JSON.stringify({ type: "go" }));
                     resetCardState(card);
                 };
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from src.enums.game import EventType
 from src.lobby.router import game_manager
 
 
@@ -22,29 +23,29 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
             data = await websocket.receive_json()
 
             match data["type"]:
-                case "game_started":
+                case EventType.GAME_STARTED.value:
                     await game_manager.event_handler.handle_game_started(player_id=user_id, game=game)
 
-                case "played_card":
+                case EventType.PLAYED_CARD.value:
                     await game_manager.event_handler.handle_played_card(
                         played_card=data["card"],
                         chosen_suit=data["chosen_suit"],
                         game=game
                     )
 
-                case "drew_card":
+                case EventType.DREW_CARD.value:
                     await game_manager.event_handler.handle_drew_card(game=game)
 
-                case "skip_turn":
+                case EventType.SKIP_TURN.value:
                     await game_manager.event_handler.handle_skip_turn(game=game)
 
-                case 'show_my_move':
+                case EventType.SHOW_MY_MOVE.value:
                     await game_manager.event_handler.handle_show_my_move(game=game, data=data)
 
-                case "game_over":
+                case EventType.GAME_OVER.value:
                     await game_manager.event_handler.handle_game_over(game=game)
 
-                case "reset_game":
+                case EventType.RESET_GAME.value:
                     await game_manager.event_handler.handle_reset_game(game=game)
 
     except WebSocketDisconnect as err:

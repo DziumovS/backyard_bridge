@@ -1,3 +1,4 @@
+from src.enums.game import EventType
 from src.user.models import Player
 from src.deck.models import Card
 
@@ -112,7 +113,7 @@ class EventHandler:
 
             await self.gm.connection_manager.send_message(
                 websocket=next_player.websocket,
-                message={"type": "game_over_draw_card"}
+                message={"type": EventType.GAME_OVER_DRAW_CARD.value}
             )
             next_player.options.must_draw -= 1
 
@@ -136,7 +137,7 @@ class EventHandler:
                 await self.gm.connection_manager.send_message(
                     websocket=player.websocket,
                     message={
-                        "type": "game_over",
+                        "type": EventType.GAME_OVER.value,
                         "players_scores": players_scores,
                         "error_msg": message,
                         "widget_msg": results,
@@ -162,12 +163,12 @@ class EventHandler:
 
             await self.gm.connection_manager.broadcast(
                 websockets=game.get_players_websocket(),
-                message={"type": "leave_game", "player_id": left_player.user_id}
+                message={"type": EventType.LEAVE_GAME.value, "player_id": left_player.user_id}
             )
 
             await self.gm.connection_manager.broadcast(
                 websockets=game.get_players_websocket(),
-                message={"type": "show_error", "msg": message}
+                message={"type": EventType.SHOW_ERROR.value, "msg": message}
             )
 
             for player in game.players:
@@ -192,7 +193,7 @@ class EventHandler:
 
                 await self.gm.connection_manager.broadcast(
                     websockets=game.get_players_websocket(),
-                    message={"type": "not_enough_players", "msg": message})
+                    message={"type": EventType.NOT_ENOUGH_PLAYERS.value, "msg": message})
 
                 for player in game.players:
                     await self.gm.connection_manager.disconnect(websocket=player.websocket)
@@ -213,7 +214,7 @@ class EventHandler:
             await self.gm.connection_manager.send_message(
                 websocket=current_player.websocket,
                 message={
-                    "type": "first_turn",
+                    "type": EventType.FIRST_TURN.value,
                     "current_card": game.current_card.card_to_dict()
                 }
             )
@@ -266,7 +267,7 @@ class EventHandler:
                 await self.gm.connection_manager.send_message(
                     websocket=current_player.websocket,
                     message={
-                        "type": "is_it_bridge",
+                        "type": EventType.IS_IT_BRIDGE.value,
                         "msg": message,
                         "current_card": played_card
                     }
@@ -348,10 +349,10 @@ class EventHandler:
         players_to_notify = [player for player in game.players if player.user_id != player_to_skip.user_id]
 
         if "card" in data:
-            message = {"type": "animate_played_card", "card": data["card"]}
+            message = {"type": EventType.ANIMATE_PLAYED_CARD.value, "card": data["card"]}
         else:
             message = {
-                "type": "animate_draw_card",
+                "type": EventType.ANIMATE_DRAW_CARD.value,
                 "current_player": next_player.user_id if game.why_end is not None else None
             }
 
@@ -379,7 +380,7 @@ class EventHandler:
             await self.gm.connection_manager.send_message(
                 websocket=player.websocket,
                 message={
-                    "type": "game_reset",
+                    "type": EventType.GAME_RESET.value,
                     "player_scores": player.scores}
             )
 
@@ -396,7 +397,7 @@ class EventHandler:
                 await self.gm.connection_manager.send_message(
                     websocket=current_player.websocket,
                     message={
-                        "type": "first_turn",
+                        "type": EventType.FIRST_TURN.value,
                         "current_card": game.current_card.card_to_dict()
                     }
                 )

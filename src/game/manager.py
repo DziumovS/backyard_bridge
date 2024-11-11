@@ -3,6 +3,7 @@ from typing import List, Optional
 from fastapi import WebSocket
 
 from src.connection.manager import ConnectionManager
+from src.enums.game import EventType
 from src.user.models import Player
 from src.game.models import Game
 from src.game.handlers import EventHandler
@@ -39,7 +40,7 @@ class GameManager:
         await self.connection_manager.send_message(
             websocket=websocket,
             message={
-                "type": "whose_turn",
+                "type": EventType.WHOSE_TURN.value,
                 "msg": message,
                 "current_player": user_id
             }
@@ -53,7 +54,7 @@ class GameManager:
         await self.connection_manager.send_message(
             websocket=player.websocket,
             message={
-                "type": "game_data",
+                "type": EventType.GAME_DATA.value,
                 "hand": player.hand_to_dict(),
                 "playable_cards": cards,
                 "deck_len": len(game.deck),

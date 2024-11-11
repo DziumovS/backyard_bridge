@@ -2,6 +2,7 @@ from typing import Tuple, List
 
 from fastapi import WebSocket
 
+from src.enums.lobby import EventType
 from src.user.models import User
 from src.lobby.models import Lobby
 
@@ -17,7 +18,7 @@ class LobbyHandlers:
         enable_start = 2 <= num_users <= 4
         await self.connection_manager.send_message(
             websocket=lobby.host.websocket,
-            message={"type": "toggle_start_button", "enable": enable_start}
+            message={"type": EventType.TOGGLE_START_BUTTON.value, "enable": enable_start}
         )
 
     async def handle_create_lobby(self, user: User, websocket: WebSocket):
@@ -29,11 +30,11 @@ class LobbyHandlers:
 
         await self.connection_manager.send_message(
             websocket=websocket,
-            message={"type": "lobby_created", "lobby_id": lobby_id, "msg": message}
+            message={"type": EventType.LOBBY_CREATED.value, "lobby_id": lobby_id, "msg": message}
         )
         await self.connection_manager.send_message(
             websocket=websocket,
-            message={"type": "users_update", "users": lobby.get_users(), "is_host": True}
+            message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users(), "is_host": True}
         )
         await self.update_start_button(lobby=lobby)
 
@@ -44,11 +45,15 @@ class LobbyHandlers:
             message = f"You have joined the lobby with ID: <b>{lobby_id}</b>"
             await self.connection_manager.send_message(
                 websocket=websocket,
-                message={"type": "joined_lobby", "lobby_id": lobby_id, "users": lobby.get_users(), "msg": message}
+                message={
+                    "type": EventType.JOINED_LOBBY.value,
+                    "lobby_id": lobby_id,
+                    "users": lobby.get_users(),
+                    "msg": message}
             )
             await self.connection_manager.broadcast(
                 websockets=lobby.get_users_websocket(),
-                message={"type": "users_update", "users": lobby.get_users()}
+                message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()}
             )
             await self.update_start_button(lobby)
 
@@ -66,8 +71,8 @@ class LobbyHandlers:
             if lobby.is_host(user_id):
                 await self.connection_manager.broadcast(
                     websockets=lobby.get_users_websocket(),
-                    message={"type": "start_game", "lobby_id": lobby.lobby_id}
-                    if lobby.in_game else {"type": "lobby_closed"}
+                    message={"type": EventType.START_GAME.value, "lobby_id": lobby.lobby_id}
+                    if lobby.in_game else {"type": EventType.LOBBY_CLOSED.value}
                 )
                 await self.connection_manager.disconnect(websocket=user.websocket, error=error)
                 for user in lobby.users.values():
@@ -77,7 +82,7 @@ class LobbyHandlers:
             else:
                 await self.connection_manager.broadcast(
                     websockets=lobby.get_users_websocket(),
-                    message={"type": "users_update", "users": lobby.get_users()}
+                    message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()}
                 )
                 await self.update_start_button(lobby)
 

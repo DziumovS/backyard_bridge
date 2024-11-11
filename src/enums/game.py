@@ -1,0 +1,21 @@
+from enum import Enum
+
+class EventType(Enum):
+    GAME_OVER_DRAW_CARD = "godc"
+    GAME_OVER = "go"
+    LEAVE_GAME = "lg"
+    SHOW_ERROR = "se"
+    NOT_ENOUGH_PLAYERS = "nep"
+    FIRST_TURN = "ft"
+    IS_IT_BRIDGE = "iib"
+    ANIMATE_PLAYED_CARD = "apc"
+    ANIMATE_DRAW_CARD = "adc"
+    GAME_RESET = "gr"
+    WHOSE_TURN = "wt"
+    GAME_DATA = "gd"
+    GAME_STARTED = "gs"
+    PLAYED_CARD = "pc"
+    DREW_CARD = "dc"
+    SKIP_TURN = "st"
+    SHOW_MY_MOVE = "smm"
+    RESET_GAME = "rg"
