@@ -53,14 +53,13 @@
             </div>
 
             <div class="preLobbyControls">
+                <div class="errorMessage">
+                    <div id="errorMessage"></div>
+                </div>
 
                 <div class="joinLobbyControls">
                     <input type="text" id="lobbyInput" placeholder="Enter lobby ID" />
                     <button id="joinLobbyButton" onclick="joinLobby()" disabled>Join Lobby</button>
-                </div>
-
-                <div class="errorMessage">
-                    <div id="errorMessage"></div>
                 </div>
 
                 <button id="createLobbyButton" onclick="createLobby()">Create Lobby</button>
@@ -244,6 +243,18 @@
         }
 
 
+        function preloadCardImages() {
+            fetch('/get_cards')
+                .then(response => response.json())
+                .then(cardUrls => {
+                    cardUrls.forEach(url => {
+                        const img = new Image();
+                        img.src = url;
+                    });
+                })
+        }
+
+
         async function joinLobby() {
             const inputLobbyId = elements.joinLobbyInput.value.trim();
             if (!inputLobbyId) return;
@@ -271,6 +282,7 @@
             ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
 
             ws.onmessage = handleWebSocketMessage;
+            preloadCardImages();
         }
 
 
@@ -359,7 +371,7 @@
                     break;
 
                 case "gr":
-                    reset_game(data.player_scores);
+                    reset_game(data.players_scores, data.player_scores);
                     break;
             }
         }
@@ -931,10 +943,15 @@
         }
 
 
-        function reset_game(playerScores) {
+        function reset_game(playersScores, playerScores) {
             closeGameOverWidget();
             elements.pS.textContent = playerScores;
             elements.scoresRate.innerHTML = "x1";
+
+            playersScores.forEach(player => {
+                const oS = document.getElementById(`${player.player_id}_oS`);
+                oS.textContent = player.scores;
+            })
         }
 
 
