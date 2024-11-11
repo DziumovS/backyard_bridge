@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.lobby.router import router as lobby_router
 from src.game.router import router as game_router
+from src.deck.router import router as deck_router
 
 app = FastAPI(
     title="Backyard bridge"
@@ -21,6 +22,7 @@ app.mount(
 
 app.include_router(lobby_router)
 app.include_router(game_router)
+app.include_router(deck_router)
 
 templates = Jinja2Templates(directory="src/templates")
 
