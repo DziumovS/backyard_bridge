@@ -264,8 +264,7 @@
             if (ws) {
                 ws.close(1000);
             }
-
-            ws = new WebSocket(`ws://localhost:8000/ws/lobby/${userId}`);
+            ws = new WebSocket(`wss://${window.location.hostname}/ws/lobby/${userId}`);
 
             ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
 
@@ -384,8 +383,8 @@
             if (isHost) {
                 ws.send(JSON.stringify({ type: "start_game" }));
             }
-
-            ws = new WebSocket(`ws://localhost:8000/ws/game/${lobbyId}/${userId}`);
+            console.log(`${window.location.origin}`)
+            ws = new WebSocket(`wss://${window.location.hostname}/ws/game/${lobbyId}/${userId}`);
 
             ws.onopen = () => ws.send(JSON.stringify({ type: "game_started" }));
             ws.onmessage = function (event) {
@@ -907,7 +906,7 @@
 
         async function backToHomePage(message, seconds) {
             await showError(message, seconds);
-            window.location.href = "http://localhost:8000";
+            window.location.href = `${window.location.origin}`;
         }
 
 
