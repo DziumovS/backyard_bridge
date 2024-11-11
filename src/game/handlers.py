@@ -262,16 +262,17 @@ class EventHandler:
             )
 
         if current_player.options.must_skip and not current_player.options.must_draw or card.rank in ("6", "J"):
-            if game.is_it_bridge(card=card):
-                message = "You have played the 4-th card in a row of the same value. Would you say bridge?"
-                await self.gm.connection_manager.send_message(
-                    websocket=current_player.websocket,
-                    message={
-                        "type": EventType.IS_IT_BRIDGE.value,
-                        "msg": message,
-                        "current_card": played_card
-                    }
-                )
+            if not game.why_end:
+                if game.is_it_bridge(card=card):
+                    message = "You have played the 4-th card in a row of the same value. Would you say bridge?"
+                    await self.gm.connection_manager.send_message(
+                        websocket=current_player.websocket,
+                        message={
+                            "type": EventType.IS_IT_BRIDGE.value,
+                            "msg": message,
+                            "current_card": played_card
+                        }
+                    )
 
     async def handle_drew_card(self, game):
         current_player = game.get_current_player()
@@ -373,7 +374,9 @@ class EventHandler:
 
         current_player = game.get_current_player()
 
-        for player in game.players:
+        players = game.players
+
+        for player in players:
             is_current_player = player.user_id == current_player.user_id
             message = "It's your turn!" if is_current_player else f"It's {current_player.user_name}'s turn!"
 
@@ -381,6 +384,7 @@ class EventHandler:
                 websocket=player.websocket,
                 message={
                     "type": EventType.GAME_RESET.value,
+                    "players_scores": [{"player_id": player.user_id, "scores": player.scores} for player in players],
                     "player_scores": player.scores}
             )
 
