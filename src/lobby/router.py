@@ -2,9 +2,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from src.connection.manager import ConnectionManager
-from src.enums.lobby import EventType
+
 from src.lobby.rules_txt import rules
 from src.lobby.manager import LobbyManager
+from src.lobby.enums import EventType
 from src.game.manager import GameManager
 from src.game.models import Game
 from src.user.models import User

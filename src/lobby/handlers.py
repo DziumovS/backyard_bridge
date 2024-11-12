@@ -2,8 +2,8 @@ from typing import Tuple, List
 
 from fastapi import WebSocket
 
-from src.enums.lobby import EventType
 from src.user.models import User
+from src.lobby.enums import EventType
 from src.lobby.models import Lobby
 
 
