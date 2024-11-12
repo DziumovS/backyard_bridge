@@ -1,4 +1,5 @@
 import random
+import asyncio
 from typing import List, Optional, Dict
 from dataclasses import dataclass
 
@@ -40,8 +41,10 @@ class Game:
         self.last_cards_j = {}
         self.why_end = None
         self.card_handler = CardHandler(game_instance=self)
+        self.all_connected_event = asyncio.Event()
 
         for player in self.players:
+            player.websocket = None
             for _ in range(5):
                 player.draw_card(self.deck)
 
@@ -49,6 +52,19 @@ class Game:
 
     def __del__(self):
         print(f"Game '{self.game_id}' has been deleted.")
+
+    async def wait_until_all_ready(self):
+        await self.all_connected_event.wait()
+
+    def check_all_players_connected(self):
+        if all(player.websocket for player in self.players):
+            self.all_connected_event.set()
+
+    def add_player_websocket(self, player_id: str, websocket: WebSocket):
+        player = self.get_player_or_none(user_id=player_id)
+        if player:
+            player.websocket = websocket
+            self.check_all_players_connected()
 
     def reset_game(self):
         self.deck = Deck()
@@ -129,7 +145,7 @@ class Game:
         random.shuffle(players)
         return players
 
-    def get_player_or_none(self, user_id: str) -> Optional[Player]:
+    def get_player_or_none(self, user_id: str) -> Player | None:
         for player in self.players:
             if player.user_id == user_id:
                 return player

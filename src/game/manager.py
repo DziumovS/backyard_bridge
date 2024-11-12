@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import WebSocket
 
 from src.connection.manager import ConnectionManager
-from src.enums.game import EventType
+from src.game.enums import EventType
 from src.user.models import Player
 from src.game.models import Game
 from src.game.handlers import EventHandler

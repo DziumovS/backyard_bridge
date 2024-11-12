@@ -1,6 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from src.enums.game import EventType
+from src.game.enums import EventType
 from src.lobby.router import game_manager
 
 
@@ -15,7 +15,9 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
     game = game_manager.get_game(game_id=game_id)
     await game_manager.connection_manager.connect(websocket=websocket)
 
-    game.get_player_or_none(user_id=user_id).websocket = websocket
+    game.add_player_websocket(player_id=user_id, websocket=websocket)
+
+    await game.wait_until_all_ready()
 
     try:
         while game.is_active:

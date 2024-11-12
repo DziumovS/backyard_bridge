@@ -1,4 +1,4 @@
-from src.enums.game import EventType
+from src.game.enums import EventType
 from src.user.models import Player
 from src.deck.models import Card
 
