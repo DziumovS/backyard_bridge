@@ -7,7 +7,7 @@ class CardHandler:
     def __init__(self, game_instance):
         self.game_instance = game_instance
 
-    def handle_card_six(self, current_player: Player):
+    def handle_card_six(self, current_player: Player) -> None:
         decks_empty = self.game_instance.deck.is_decks_empty()
         playable_cards = current_player.get_playable_cards(
             current_card=self.game_instance.current_card,
@@ -19,11 +19,11 @@ class CardHandler:
         else:
             current_player.options.must_draw = 0 if decks_empty else current_player.options.must_draw + 1
 
-    def _handle_card_six(self, current_player: Player, card: Card):
+    def _handle_card_six(self, current_player: Player, card: Card) -> None:
         self.game_instance.remove_played_card(current_player=current_player, card=card)
         self.handle_card_six(current_player=current_player)
 
-    def _handle_card_seven(self, current_player: Player, card: Card):
+    def _handle_card_seven(self, current_player: Player, card: Card) -> None:
         self.game_instance.remove_played_card(current_player=current_player, card=card)
         current_player.options.must_skip = True
 
@@ -31,7 +31,7 @@ class CardHandler:
         next_player.set_default_options()
         next_player.options.must_draw += 1
 
-    def _handle_card_eight(self, current_player: Player, card: Card):
+    def _handle_card_eight(self, current_player: Player, card: Card) -> None:
         self.game_instance.remove_played_card(current_player=current_player, card=card)
         current_player.options.must_skip = True
 
@@ -40,7 +40,7 @@ class CardHandler:
         next_player.options.must_draw += 2
         next_player.options.must_skip = True
 
-    def _handle_card_jack(self, current_player: Player, card: Card):
+    def _handle_card_jack(self, current_player: Player, card: Card) -> None:
         self.game_instance.remove_played_card(current_player=current_player, card=card)
         current_player.options.can_draw = False
         current_player.options.can_skip = True
@@ -56,7 +56,7 @@ class CardHandler:
         next_player = self.game_instance.get_next_player()
         next_player.set_default_options()
 
-    def _handle_card_ace(self, current_player: Player, card: Card):
+    def _handle_card_ace(self, current_player: Player, card: Card) -> None:
         self.game_instance.remove_played_card(current_player=current_player, card=card)
         current_player.options.must_skip = True
 
@@ -64,12 +64,12 @@ class CardHandler:
         next_player.set_default_options()
         next_player.options.must_skip = True
 
-    def _handle_normal_card(self, current_player: Player, card: Card):
+    def _handle_normal_card(self, current_player: Player, card: Card) -> None:
         self.game_instance.remove_played_card(current_player=current_player, card=card)
         current_player.set_default_options()
         current_player.options.must_skip = True
 
-    def handle_special_cards(self, current_player: Player, card: Card):
+    def handle_special_cards(self, current_player: Player, card: Card) -> None:
         match self.game_instance.current_card.rank:
             case "6":
                 self._handle_card_six(current_player=current_player, card=card)
@@ -89,7 +89,7 @@ class EventHandler:
     def __init__(self, game_manager_instance):
         self.gm = game_manager_instance
 
-    async def _handle_game_over(self, current_player: Player, next_player: Player, game):
+    async def _handle_game_over(self, current_player: Player, next_player: Player, game) -> None:
         if next_player.options.must_draw:
             message = f"You got {"2 cards" if game.current_card.rank == "8" else "1 card"} from the deck."
 
@@ -145,7 +145,7 @@ class EventHandler:
                     }
                 )
 
-    async def handle_disconnect_game(self, player_id: str, error: bool = False):
+    async def handle_disconnect_game(self, player_id: str, error: bool = False) -> None:
         game = self.gm.get_game_by_player_id(player_id=player_id)
         if game:
             left_player = game.get_player_or_none(user_id=player_id)
@@ -200,7 +200,7 @@ class EventHandler:
 
                 self.gm.remove_game(game.game_id)
 
-    async def handle_game_started(self, player_id: str, game):
+    async def handle_game_started(self, player_id: str, game) -> None:
         player = game.get_player_or_none(user_id=player_id)
         current_player = game.get_current_player()
         is_current_player = game.is_current_player(player_id=player_id)
@@ -220,7 +220,7 @@ class EventHandler:
             )
         game.four_of_a_kind_tracker.current_rank = game.current_card.rank
 
-    async def handle_played_card(self, played_card: dict, chosen_suit: str | None, game):
+    async def handle_played_card(self, played_card: dict, chosen_suit: str | None, game) -> None:
         current_player = game.get_current_player()
         previous_card = game.current_card
         card = current_player.dict_to_card(card=played_card)
@@ -274,7 +274,7 @@ class EventHandler:
                         }
                     )
 
-    async def handle_drew_card(self, game):
+    async def handle_drew_card(self, game) -> None:
         current_player = game.get_current_player()
         current_player.draw_card(deck=game.deck)
 
@@ -304,7 +304,7 @@ class EventHandler:
         if all((not current_player.options.can_draw, current_player.options.can_skip)):
             current_player.set_default_options()
 
-    async def handle_skip_turn(self, game):
+    async def handle_skip_turn(self, game) -> None:
         current_player = game.get_current_player()
 
         if current_player.user_id not in game.last_cards_j:
@@ -342,7 +342,7 @@ class EventHandler:
                     game.why_end = "empty_deck"
                 await self._handle_game_over(current_player=next_player, next_player=next_player, game=game)
 
-    async def handle_show_my_move(self, game, data: dict):
+    async def handle_show_my_move(self, game, data: dict) -> None:
         current_player = game.get_current_player()
         next_player = game.get_next_player()
 
@@ -360,7 +360,7 @@ class EventHandler:
         for player in players_to_notify:
             await self.gm.connection_manager.send_message(websocket=player.websocket, message=message)
 
-    async def handle_game_over(self, game):
+    async def handle_game_over(self, game) -> None:
         if not game.why_end:
             game.why_end = "bridge"
 
@@ -369,7 +369,7 @@ class EventHandler:
 
         await self._handle_game_over(current_player=current_player, next_player=next_player, game=game)
 
-    async def handle_reset_game(self, game):
+    async def handle_reset_game(self, game) -> None:
         game.reset_game()
 
         current_player = game.get_current_player()

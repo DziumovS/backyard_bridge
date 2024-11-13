@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from fastapi import WebSocket
 
 from src.connection.manager import ConnectionManager
@@ -12,31 +10,31 @@ from src.game.handlers import EventHandler
 class GameManager:
     def __init__(self, manager: ConnectionManager):
         self.connection_manager = manager
-        self.games: List[Game] = []
+        self.games: list[Game] = []
         self.event_handler = EventHandler(game_manager_instance=self)
 
-    def create_game(self, game: Game):
+    def create_game(self, game: Game) -> None:
         self.games.append(game)
 
-    def remove_game(self, game_id: str):
+    def remove_game(self, game_id: str) -> None:
         game = self.get_game(game_id)
         if game:
             self.games.remove(game)
 
-    def get_game(self, game_id: str) -> Optional[Game]:
+    def get_game(self, game_id: str) -> Game | None:
         for game in self.games:
             if game.game_id == game_id:
                 return game
         return None
 
-    def get_game_by_player_id(self, player_id: str) -> Optional[Game]:
+    def get_game_by_player_id(self, player_id: str) -> Game | None:
         for game in self.games:
             for player in game.players:
                 if player.user_id == player_id:
                     return game
         return None
 
-    async def send_whose_turn(self, websocket: WebSocket, message: str, user_id: str):
+    async def send_whose_turn(self, websocket: WebSocket, message: str, user_id: str) -> None:
         await self.connection_manager.send_message(
             websocket=websocket,
             message={
@@ -47,7 +45,7 @@ class GameManager:
         )
 
     async def send_game_data(self, player: Player, current_player: bool, game: Game,
-                             chosen_suit: dict | None = None, playable_cards: bool = True):
+                             chosen_suit: dict | None = None, playable_cards: bool = True) -> None:
 
         cards = player.prepare_playable_cards(game=game, chosen_suit=chosen_suit, playable_cards=playable_cards)
 

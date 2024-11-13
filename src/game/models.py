@@ -1,6 +1,5 @@
 import random
 import asyncio
-from typing import List, Optional, Dict
 from dataclasses import dataclass
 
 from fastapi import WebSocket
@@ -24,13 +23,13 @@ class FourOfAKindTracker:
 
         return self.count == 4 and self.current_rank != "6"
 
-    def reset(self):
+    def reset(self) -> None:
         self.current_rank = None
         self.count = 0
 
 
 class Game:
-    def __init__(self, game_id: str, players: List[Player]):
+    def __init__(self, game_id: str, players: list[Player]):
         self.deck = Deck()
         self.game_id = game_id
         self.players = self.shuffle_players(players=players)
@@ -53,20 +52,20 @@ class Game:
     def __del__(self):
         print(f"Game '{self.game_id}' has been deleted.")
 
-    async def wait_until_all_ready(self):
+    async def wait_until_all_ready(self) -> None:
         await self.all_connected_event.wait()
 
-    def check_all_players_connected(self):
+    def check_all_players_connected(self) -> None:
         if all(player.websocket for player in self.players):
             self.all_connected_event.set()
 
-    def add_player_websocket(self, player_id: str, websocket: WebSocket):
+    def add_player_websocket(self, player_id: str, websocket: WebSocket) -> None:
         player = self.get_player_or_none(user_id=player_id)
         if player:
             player.websocket = websocket
             self.check_all_players_connected()
 
-    def reset_game(self):
+    def reset_game(self) -> None:
         self.deck = Deck()
         self.is_active = True
         self.current_player_index = 0
@@ -88,11 +87,11 @@ class Game:
 
         self.current_card = self.card_distribution()
 
-    def reset_players_scores(self):
+    def reset_players_scores(self) -> None:
         for player in self.players:
             player.reset_score()
 
-    def calculate_scores(self):
+    def calculate_scores(self) -> list:
         points_mapping = {
             "10": 10,
             "Q": 10,
@@ -121,7 +120,7 @@ class Game:
 
         return result
 
-    def get_players_game_results(self):
+    def get_players_game_results(self) -> tuple:
         players_scores, losers, winners = [], [], []
 
         for player in self.players:
@@ -138,10 +137,10 @@ class Game:
         self.current_card = self.get_current_player().hand[0]
         return self.current_card
 
-    def current_card_to_dict(self) -> Dict:
+    def current_card_to_dict(self) -> dict:
         return self.current_card.card_to_dict()
 
-    def shuffle_players(self, players: List[Player]) -> List[Player]:
+    def shuffle_players(self, players: list[Player]) -> list[Player]:
         random.shuffle(players)
         return players
 
@@ -151,7 +150,7 @@ class Game:
                 return player
         return None
 
-    def remove_player(self, player: Player):
+    def remove_player(self, player: Player) -> None:
         if player in self.players:
             self.players.remove(player)
 
@@ -165,17 +164,17 @@ class Game:
     def get_next_player(self) -> Player:
         return self.players[(self.current_player_index + 1) % len(self.players)]
 
-    def get_players_websocket(self) -> List[WebSocket]:
+    def get_players_websocket(self) -> list[WebSocket]:
         return [player.websocket for player in self.players]
 
-    def next_player(self):
+    def next_player(self) -> None:
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
 
-    def remove_played_card(self, current_player: Player, card: Card | None):
+    def remove_played_card(self, current_player: Player, card: Card | None) -> None:
         current_player.hand.remove(self.current_card)
         self.deck.insert_to_bounce_deck(previous_card=card)
 
-    def get_game_over_message(self, current_player: Player):
+    def get_game_over_message(self, current_player: Player) -> tuple:
         players_scores, losers, winners = self.get_players_game_results()
         player_username = current_player.user_name
 

@@ -1,5 +1,3 @@
-from typing import Tuple, List
-
 from fastapi import WebSocket
 
 from src.user.models import User
@@ -13,7 +11,7 @@ class LobbyHandlers:
         self.lobby_manager = lobby_manager
         self.connection_manager = lobby_manager.connection_manager
 
-    async def update_start_button(self, lobby: Lobby):
+    async def update_start_button(self, lobby: Lobby) -> None:
         num_users = len(lobby.users)
         enable_start = 2 <= num_users <= 4
         await self.connection_manager.send_message(
@@ -21,7 +19,7 @@ class LobbyHandlers:
             message={"type": EventType.TOGGLE_START_BUTTON.value, "enable": enable_start}
         )
 
-    async def handle_create_lobby(self, user: User, websocket: WebSocket):
+    async def handle_create_lobby(self, user: User, websocket: WebSocket) -> None:
         lobby_id = self.lobby_manager.generate_lobby_id()
         lobby = Lobby(lobby_id=lobby_id, host=user)
         self.lobby_manager.lobbies[lobby_id] = lobby
@@ -38,7 +36,7 @@ class LobbyHandlers:
         )
         await self.update_start_button(lobby=lobby)
 
-    async def handle_join_lobby(self, user: User, websocket: WebSocket, lobby_id: str):
+    async def handle_join_lobby(self, user: User, websocket: WebSocket, lobby_id: str) -> None:
         lobby = self.lobby_manager.get_lobby(lobby_id)
         if lobby:
             lobby.add_user(user)
@@ -57,13 +55,13 @@ class LobbyHandlers:
             )
             await self.update_start_button(lobby)
 
-    async def handle_start_game(self, user_id: str) -> Tuple[str, List[User]]:
+    async def handle_start_game(self, user_id: str) -> tuple[str, list[User]]:
         lobby = self.lobby_manager.get_lobby_by_user_id(user_id)
         if lobby:
             lobby.in_game = True
             return lobby.lobby_id, lobby.create_player_list()
 
-    async def handle_disconnect_lobby(self, user_id: str, error: bool = False):
+    async def handle_disconnect_lobby(self, user_id: str, error: bool = False) -> None:
         lobby = self.lobby_manager.get_lobby_by_user_id(user_id)
         if lobby:
             user = lobby.get_user(user_id=user_id)
