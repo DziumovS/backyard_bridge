@@ -614,7 +614,13 @@
 
         function whoseTurn(message, current_player) {
             elements.turnText.textContent = message;
+
             change_player(current_player);
+
+            elements.turnText.classList.add("wave-effect");
+            setTimeout(() => {
+                elements.turnText.classList.remove("wave-effect");
+            }, 5000);
         }
 
 

@@ -343,6 +343,21 @@ button:active {
     text-align: center;
 }
 
+.wave-effect {
+    animation: waveText 0.7s ease-out 5;
+}
+
+@keyframes waveText {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.2);
+        opacity: 0;
+    }
+}
+
 #playerHand {
     width: min(98vw, 1000px);
     display: flex;
