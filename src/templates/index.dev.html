@@ -202,6 +202,7 @@
             nameAndScores: document.getElementById("nameAndScores"),
             playerScores: document.getElementById("scores"),
             gameOverWidget: document.getElementById("game-over-widget"),
+            playerContainer: document.getElementById("playerContainer"),
         };
 
 
@@ -447,6 +448,7 @@
 
             elements.lobbyControls.style.display = "none";
             elements.currentCards.style.display = "flex";
+            elements.playerContainer.style.display = "flex";
             elements.nameAndScores.style.flexDirection = "row";
             elements.pS.innerHTML = "0";
             elements.scoresRate.innerHTML = "x1";
