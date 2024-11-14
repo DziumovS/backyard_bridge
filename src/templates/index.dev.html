@@ -282,6 +282,21 @@
         }
 
 
+        function setAndCopyLobbyId(lobby_id, msg) {
+            lobbyId = lobby_id;
+            const message = `${msg} <br><span class="small-text">(click to copy ID to clipboard)</span>`
+            const info = `<br><span class="small-text" style="color: red">ID copied!</span>`;
+            elements.lobbyMessage.innerHTML = message;
+            elements.lobbyMessage.addEventListener("click", () => {
+                navigator.clipboard.writeText(lobby_id);
+                elements.lobbyMessage.innerHTML += info;
+                setTimeout(() => {
+                    elements.lobbyMessage.innerHTML = message;
+                }, 2000);
+            });
+        }
+
+
         function initializeWebSocket(type, message) {
             if (ws) {
                 ws.close(1000);
@@ -302,13 +317,11 @@
 
             switch (data.type) {
                 case "lcr":
-                    lobbyId = data.lobby_id;
-                    elements.lobbyMessage.innerHTML = data.msg;
+                    setAndCopyLobbyId(data.lobby_id, data.msg);
                     break;
 
                 case "jdl":
-                    lobbyId = data.lobby_id;
-                    elements.lobbyMessage.innerHTML = data.msg;
+                    setAndCopyLobbyId(data.lobby_id, data.msg);
                     updateUsers(data.users, false);
                     break;
 
