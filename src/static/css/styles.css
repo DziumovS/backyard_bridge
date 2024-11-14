@@ -9,7 +9,7 @@ h1 {
     text-shadow: 2px 2px 5px rgba(108, 108, 108, 0.7);
 }
 
-h2 {
+h2, #welcomeMessage {
     text-align: center;
     font-weight: normal;
     cursor: pointer;

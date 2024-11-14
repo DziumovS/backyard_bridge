@@ -54,6 +54,7 @@
             </div>
 
             <div class="preLobbyControls">
+                <h2 id="welcomeMessage">To start the game create a lobby or join your friends by their lobby ID!</h2>
                 <div class="errorMessage">
                     <div id="errorMessage"></div>
                 </div>
@@ -203,6 +204,7 @@
             playerScores: document.getElementById("scores"),
             gameOverWidget: document.getElementById("game-over-widget"),
             playerContainer: document.getElementById("playerContainer"),
+            welcomeMessage: document.getElementById("welcomeMessage"),
         };
 
 
@@ -236,6 +238,7 @@
 
         function setLobbyUI(isHostView) {
             elements.wsId.style.display = "block";
+            elements.welcomeMessage.style.display = "none";
             elements.createLobbyButton.style.display = "none";
             elements.nameForm.style.display = "none";
             elements.joinLobbyInput.style.display = "none";
@@ -446,6 +449,11 @@
                 handleWebSocketMessage(event);
             };
 
+            setGameUI();
+        }
+
+
+        function setGameUI() {
             elements.lobbyControls.style.display = "none";
             elements.currentCards.style.display = "flex";
             elements.playerContainer.style.display = "flex";
@@ -491,6 +499,7 @@
 
         function returnToMainPage() {
             elements.lobbyControls.style.display = "none";
+            elements.welcomeMessage.style.display = "block";
             elements.createLobbyButton.style.display = "inline";
             elements.nameForm.style.display = "none";
             elements.joinLobbyInput.style.display = "inline";
