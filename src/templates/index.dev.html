@@ -284,16 +284,28 @@
 
         function setAndCopyLobbyId(lobby_id, msg) {
             lobbyId = lobby_id;
-            const message = `${msg} <br><span class="small-text">(click to copy ID to clipboard)</span>`
-            const info = `<br><span class="small-text" style="color: red">ID copied!</span>`;
-            elements.lobbyMessage.innerHTML = message;
-            elements.lobbyMessage.addEventListener("click", () => {
+            const pre_click = `<br><span class="small-text">(click to copy ID to clipboard)</span>`;
+            const post_click = `<br><span class="small-text" style="color: red" id="copyInfo">ID copied!</span>`;
+            elements.lobbyMessage.innerHTML = msg + pre_click;
+
+            elements.lobbyMessage.removeEventListener("click", copyToClipboard);
+            elements.lobbyMessage.addEventListener("click", copyToClipboard);
+
+            function copyToClipboard() {
                 navigator.clipboard.writeText(lobby_id);
-                elements.lobbyMessage.innerHTML += info;
+
+                if (!document.getElementById("copyInfo")) {
+                    elements.lobbyMessage.innerHTML = msg + post_click;
+                }
+
                 setTimeout(() => {
-                    elements.lobbyMessage.innerHTML = message;
+                    const copyInfo = document.getElementById("copyInfo");
+                    if (copyInfo) {
+                        copyInfo.remove();
+                    }
+                    elements.lobbyMessage.innerHTML = msg + pre_click;
                 }, 2000);
-            });
+            }
         }
 
 
