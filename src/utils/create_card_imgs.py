@@ -1,4 +1,5 @@
 from pathlib import Path
+import math
 from PIL import Image, ImageDraw, ImageFont
 
 PATH_TO_SAVE = f"{Path(__file__).resolve().parent.parent}/static/cards/"
@@ -34,11 +35,12 @@ except IOError:
 
 
 def create_rounded_rectangle(size, radius, fill):
+    mode = "L" if isinstance(fill, int) else "RGBA"
     width, height = size
-    rectangle = Image.new("RGBA", (width, height), (255, 255, 255, 0))
-    draw = ImageDraw.Draw(rectangle)
-    draw.rounded_rectangle([0, 0, width-1, height], radius, fill=fill)
-    return rectangle
+    mask = Image.new(mode, (width, height), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle([0, 0, width-1, height-1], radius, fill=fill)
+    return mask
 
 
 def create_card_template(fill: tuple | str):
@@ -54,10 +56,69 @@ def create_card_template(fill: tuple | str):
     return card_img
 
 
-def create_closed_card():
-    card_img = create_card_template(fill=(251, 186, 0))
-    draw = ImageDraw.Draw(card_img)
+def create_gradient_background(size, start_color, end_color):
+    width, height = size
+    gradient_background = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    for y in range(height):
+        r = start_color[0] + (end_color[0] - start_color[0]) * y // height
+        g = start_color[1] + (end_color[1] - start_color[1]) * y // height
+        b = start_color[2] + (end_color[2] - start_color[2]) * y // height
+        a = start_color[3] + (end_color[3] - start_color[3]) * y // height
+        ImageDraw.Draw(gradient_background).line([(0, y), (width, y)], fill=(r, g, b, a))
+    return gradient_background
 
+
+def create_wave_gradient(size, start_color, end_color, amplitude=10, frequency=20, thickness=3):
+
+    width, height = size
+    wave_overlay = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(wave_overlay)
+
+    for y in range(0, height, amplitude * 2):
+        for x in range(0, width, 1):
+            offset = int(amplitude * math.sin(2 * math.pi * x / frequency))
+            y_position = y + offset
+
+            r = start_color[0] + (end_color[0] - start_color[0]) * y_position // height
+            g = start_color[1] + (end_color[1] - start_color[1]) * y_position // height
+            b = start_color[2] + (end_color[2] - start_color[2]) * y_position // height
+            a = start_color[3] + (end_color[3] - start_color[3]) * y_position // height
+
+            draw.line(
+                [(x, y_position - thickness // 2), (x, y_position + thickness // 2)],
+                fill=(r, g, b, a),
+                width=thickness,
+            )
+
+    return wave_overlay
+
+
+def create_patterned_background(size=(card_width - border_width * 2, card_height - border_width * 2),
+                                gradient_start=(25, 53, 164, 255),
+                                gradient_end=(196, 229, 255, 170),
+                                wave_start=(24, 49, 152, 255),
+                                wave_end=(255, 255, 255, 255),
+                                amplitude=10,
+                                frequency=55,
+                                thickness=3):
+    gradient_background = create_gradient_background(size, gradient_start, gradient_end)
+    wave_overlay = create_wave_gradient(size, wave_start, wave_end, amplitude, frequency, thickness)
+    patterned_background = Image.alpha_composite(gradient_background, wave_overlay)
+
+    mask = create_rounded_rectangle(size, corner_radius, fill=255)
+
+    rounded_background = Image.new("RGBA", size, (255, 255, 255, 0))
+    rounded_background.paste(patterned_background, (0, 0), mask)
+    return rounded_background
+
+
+def create_closed_card():
+    patterned_background = create_patterned_background()
+
+    card_img = create_card_template(fill=(216, 219, 226))
+    card_img.paste(patterned_background, (border_width, border_width), patterned_background)
+
+    draw = ImageDraw.Draw(card_img)
     draw.text((4 + border_width, card_height / 3.5 + border_width), "Mebelka's", font=font_little, fill="black")
     draw.text((0.3 + border_width, card_height / 2.5 + border_width), "BRIDGE", font=font_small, fill="black")
 
@@ -66,7 +127,10 @@ def create_closed_card():
 
 
 def create_opponent_card():
-    card_img = create_card_template(fill=(251, 186, 0))
+    patterned_background = create_patterned_background()
+
+    card_img = create_card_template(fill=(216, 219, 226))
+    card_img.paste(patterned_background, (border_width, border_width), patterned_background)
 
     card_img = card_img.convert("P", palette=Image.ADAPTIVE)
     card_img.save(f"{PATH_TO_SAVE}opponent_card.png", quality=1, optimize=True)
@@ -106,9 +170,12 @@ def create_suit_cards(suit):
 
 
 def create_tech_cards(x, text):
-    card_img = create_card_template(fill=(251, 186, 0))
-    draw = ImageDraw.Draw(card_img)
+    patterned_background = create_patterned_background()
 
+    card_img = create_card_template(fill=(216, 219, 226))
+    card_img.paste(patterned_background, (border_width, border_width), patterned_background)
+
+    draw = ImageDraw.Draw(card_img)
     draw.text((x + border_width, card_height / 2.33 + border_width), text, font=font_little, fill="black")
 
     return card_img
