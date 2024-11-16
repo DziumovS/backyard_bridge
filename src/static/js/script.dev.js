@@ -122,7 +122,7 @@ async function joinLobby() {
 function setAndCopyLobbyId(lobby_id, msg) {
     lobbyId = lobby_id;
     const pre_click = `<br><span class="small-text">(click to copy ID to clipboard)</span>`;
-    const post_click = `<br><span class="small-text" style="color: red" id="copyInfo">ID copied!</span>`;
+    const post_click = `<br><span class="small-text" style="color: #ffa500" id="copyInfo">ID copied!</span>`;
     elements.lobbyMessage.innerHTML = msg + pre_click;
 
     elements.lobbyMessage.removeEventListener("click", copyToClipboard);
