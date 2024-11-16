@@ -40,7 +40,11 @@ In these cases, all players will be given points based on their cards in their h
   &nbsp;&nbsp;• 10 points if you end the game with a Jack and another card besides the Jack(s);  
   &nbsp;&nbsp;• -20 points if you finish the game by playing the Jack(s).
 
-
-
 ### Objective
 The object of the game is to get rid of the cards in your hand as quickly as possible without scoring more than 125 points.
+
+
+## DEPLOY
+1) Install from requirements.txt
+2) From `src/utils/` run `create_card_imgs.py` to create cards images
+3) And run common `uvicorn main:app --reload`
