@@ -5,6 +5,7 @@ There are no winners. Only losers.
 ### DEMO
 To try the game you can get a temporary link in `ngrok`: `ngrok http 8000`,  
 remembering to specify it in `origins` list in `main.py`.
+
 ---
 
 ### NUMBER OF PLAYERS
