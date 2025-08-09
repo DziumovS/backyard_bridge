@@ -55,6 +55,20 @@ elements.nameInput.addEventListener("input", function () {
 });
 
 
+function getWsBaseUrl(path) {
+    const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    const protocol = isLocal ? "ws" : "wss";
+    const host = isLocal ? "localhost:8000" : window.location.host;
+    return `${protocol}://${host}${path}`;
+}
+
+
+function getHttpBaseUrl(path = "") {
+    const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    return isLocal ? `http://localhost:8000${path}` : `${window.location.origin}${path}`;
+}
+
+
 function updateUsername(event) {
     event.preventDefault();
 
@@ -151,8 +165,7 @@ function initializeWebSocket(type, message) {
         ws.close(1000);
     }
 
-    ws = new WebSocket(`wss://${window.location.hostname}/ws/lobby/${userId}`);  // https
-    // ws = new WebSocket(`ws://localhost:8000/ws/lobby/${userId}`);  // http
+    ws = new WebSocket(getWsBaseUrl(`/ws/lobby/${userId}`));
 
     ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
 
@@ -271,8 +284,7 @@ function startGame() {
         ws.send(JSON.stringify({ type: "sg" }));
     }
 
-    ws = new WebSocket(`wss://${window.location.hostname}/ws/game/${lobbyId}/${userId}`);  // https
-    // ws = new WebSocket(`ws://localhost:8000/ws/game/${lobbyId}/${userId}`);  // http
+    ws = new WebSocket(getWsBaseUrl(`/ws/game/${lobbyId}/${userId}`));
 
     startLoadingAnimation(1, 1.5);
 
@@ -810,8 +822,7 @@ function closeRulesWidget() {
 
 async function backToHomePage(message, seconds) {
     await showError(message, seconds);
-    window.location.href = `${window.location.origin}`;  // https
-    // window.location.href = "http://localhost:8000";  // http
+    window.location.href = getHttpBaseUrl();
 }
 
 
@@ -864,8 +875,6 @@ function isItBridge(card) {
             resetCardState(card);
         };
     }, 50);
-
-
 }
 
 
@@ -900,18 +909,18 @@ function closeGameOverWidget() {
 
 
 function startLoadingAnimation(progress_sec, timer_sec) {
-            const overlay = document.getElementById("overlay");
-            const progress = document.querySelector(".progress");
+    const overlay = document.getElementById("overlay");
+    const progress = document.querySelector(".progress");
 
-            overlay.style.display = "flex";
+    overlay.style.display = "flex";
 
-            progress.style.width = "0%";
-            progress.style.transition = `width ${progress_sec}s linear`;
-            setTimeout(() => {
-                progress.style.width = "100%";
-            }, 50);
+    progress.style.width = "0%";
+    progress.style.transition = `width ${progress_sec}s linear`;
+    setTimeout(() => {
+        progress.style.width = "100%";
+    }, 50);
 
-            setTimeout(() => {
-                overlay.style.display = "none";
-            }, timer_sec * 1000);
-        }
+    setTimeout(() => {
+        overlay.style.display = "none";
+    }, timer_sec * 1000);
+}
