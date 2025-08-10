@@ -1,5 +1,6 @@
 # Backyard bridge
-Card game, very similar to UNO.  
+Multiplayer card game, very similar to UNO.
+![](/src/static/readme.png)
 There are no winners. Only losers.
 
 ### DEMO
