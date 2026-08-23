@@ -2,11 +2,13 @@ let ws;
 let lobbyId;
 let userId = Date.now().toString().slice(-9);
 let userName = userId;
+let sessionToken = "";
 let isHost = false;
 let currentPlayer = "";
 let eventHandlersAdded = false;
 let game_over = false;
 let errorTimeout;
+let loadingTimeout;
 
 
 const elements = {
@@ -56,16 +58,13 @@ elements.nameInput.addEventListener("input", function () {
 
 
 function getWsBaseUrl(path) {
-    const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-    const protocol = isLocal ? "ws" : "wss";
-    const host = isLocal ? "localhost:8000" : window.location.host;
-    return `${protocol}://${host}${path}`;
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${window.location.host}${path}`;
 }
 
 
 function getHttpBaseUrl(path = "") {
-    const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-    return isLocal ? `http://localhost:8000${path}` : `${window.location.origin}${path}`;
+    return `${window.location.origin}${path}`;
 }
 
 
@@ -178,6 +177,11 @@ function handleWebSocketMessage(event) {
     const data = JSON.parse(event.data);
 
     switch (data.type) {
+        case "sid":
+            userId = data.user_id;
+            sessionToken = data.session_token;
+            break;
+
         case "lcr":
             setAndCopyLobbyId(data.lobby_id, data.msg);
             break;
@@ -185,10 +189,12 @@ function handleWebSocketMessage(event) {
         case "jdl":
             setAndCopyLobbyId(data.lobby_id, data.msg);
             updateUsers(data.users, false);
+            finishLoadingAnimation();
             break;
 
         case "uu":
             updateUsers(data.users, data.is_host);
+            finishLoadingAnimation();
             break;
 
         case "sg":
@@ -204,10 +210,13 @@ function handleWebSocketMessage(event) {
             break;
 
         case "gd":
+            isHost = data.is_host;
+            if (data.players) ensureGamePlayers(data.players);
             checkScoresRate(data.scores_rate);
             updatePlayerHand(data.hand, data.current_player, data.playable_cards, "current");
             updateOpponentData(data.players_hands);
             updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit, data.player_options);
+            finishLoadingAnimation();
             break;
 
         case "wt":
@@ -234,7 +243,7 @@ function handleWebSocketMessage(event) {
         case "go":
             removeHighlighted("#leftCard img");
             showError(data.error_msg, 5).then(() => {
-                showGameOverWidget(data.widget_msg, data.players_scores, data.player_scores);
+                showGameOverWidget(data.widget_msg, data.players_scores, data.player_scores, data.is_host);
             });
             break;
 
@@ -288,7 +297,10 @@ function startGame() {
 
     startLoadingAnimation(1, 1.5);
 
-    ws.onopen = () => ws.send(JSON.stringify({ type: "gs" }));
+    ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "auth", token: sessionToken }));
+        ws.send(JSON.stringify({ type: "gs" }));
+    };
 
     ws.onmessage = function (event) {
         handleWebSocketMessage(event);
@@ -324,6 +336,19 @@ function setGameUI() {
         opponentHands.forEach(hand => {
             hand.style.display = "flex";
         });
+}
+
+
+function ensureGamePlayers(players) {
+    const expectedIds = players.map(player => player.user_id).sort();
+    const renderedIds = Array.from(elements.usersList.children).map(element => element.id).sort();
+    const isComplete = expectedIds.length === renderedIds.length
+        && expectedIds.every((playerId, index) => playerId === renderedIds[index]);
+
+    if (!isComplete) {
+        updateUsers(players, false);
+    }
+    setGameUI();
 }
 
 
@@ -536,8 +561,6 @@ function updateCurrentCards(currentCard, deckLen, chosenSuit, playerOptions) {
 
 async function playCard(card, whose) {
     if (whose === "current") {
-        ws.send(JSON.stringify({ type: "smm", card: card }));
-
         const cardDiv = [...elements.playerHand.children].find(cardElement => {
             const img = cardElement.querySelector('img');
             return img.alt === `${card.rank}_${card.suit}`;
@@ -551,9 +574,8 @@ async function playCard(card, whose) {
         await animatePlayedCard(cardImg);
     }
 
-    updateRightCard(card);
-
     if (whose === "current") {
+        updateRightCard(card);
         if (card.rank === "J") {
             showJackWidget(card);
         } else {
@@ -608,8 +630,6 @@ async function animatePlayedCard(cardElement) {
 
 
 async function drawCard() {
-    ws.send(JSON.stringify({ type: "smm" }));
-
     await animateDrawCard("current");
 
     if (game_over) {
@@ -839,7 +859,9 @@ function checkScoresRate(scoresRate) {
 
 
 function startNewGame() {
-    ws.send(JSON.stringify({ type: "rg" }));
+    if (isHost) {
+        ws.send(JSON.stringify({ type: "rg" }));
+    }
 }
 
 
@@ -889,7 +911,7 @@ function resetCardState(card) {
 }
 
 
-function showGameOverWidget(results, playersScores, playerScores) {
+function showGameOverWidget(results, playersScores, playerScores, hostCanRestart) {
     playersScores.forEach(player => {
         const oS = document.getElementById(`${player.player_id}_oS`);
         oS.textContent = player.scores;
@@ -898,6 +920,7 @@ function showGameOverWidget(results, playersScores, playerScores) {
     elements.pS.textContent = playerScores;
 
     document.querySelector(".results-column p").innerHTML = results;
+    document.getElementById("continueGameButton").style.display = hostCanRestart ? "inline" : "none";
     elements.gameOverWidget.style.display = "flex";
 }
 
@@ -908,19 +931,95 @@ function closeGameOverWidget() {
 }
 
 
-function startLoadingAnimation(progress_sec, timer_sec) {
+function startLoadingAnimation() {
     const overlay = document.getElementById("overlay");
     const progress = document.querySelector(".progress");
 
+    clearTimeout(loadingTimeout);
     overlay.style.display = "flex";
 
     progress.style.width = "0%";
-    progress.style.transition = `width ${progress_sec}s linear`;
-    setTimeout(() => {
+    progress.style.transition = "width 8s cubic-bezier(0.1, 0.7, 0.2, 1)";
+    loadingTimeout = setTimeout(() => {
         progress.style.width = "100%";
     }, 50);
+}
 
-    setTimeout(() => {
-        overlay.style.display = "none";
-    }, timer_sec * 1000);
+function finishLoadingAnimation() {
+    const overlay = document.getElementById("overlay");
+    const progress = document.querySelector(".progress");
+
+    clearTimeout(loadingTimeout);
+    progress.style.transition = "none";
+    progress.style.width = "100%";
+    overlay.style.display = "none";
+}
+
+
+/* v8 ignore next -- production-only guard for the test API */
+if (globalThis.__BACKYARD_BRIDGE_TEST__) {
+    globalThis.__backyardBridge = {
+        elements,
+        getWsBaseUrl,
+        getHttpBaseUrl,
+        updateUsername,
+        setLobbyUI,
+        createLobby,
+        preloadCardImages,
+        joinLobby,
+        setAndCopyLobbyId,
+        initializeWebSocket,
+        handleWebSocketMessage,
+        showError,
+        startGame,
+        setGameUI,
+        ensureGamePlayers,
+        leaveGame,
+        leaveLobby,
+        returnToMainPage,
+        updateUsers,
+        updateOpponentData,
+        toggleStartButton,
+        updatePlayerHand,
+        whoseTurn,
+        change_player,
+        updateCurrentCards,
+        playCard,
+        updateRightCard,
+        animatePlayedCard,
+        drawCard,
+        animateDrawCard,
+        skip_turn,
+        colorSkipTurn,
+        colorDrawCard,
+        firstTurn,
+        showJackWidget,
+        checkCurrentPlayerOptions,
+        setDefaultDrawCard,
+        setDefaultSkipTurn,
+        removeHighlighted,
+        showRulesWidget,
+        closeRulesWidget,
+        backToHomePage,
+        checkScoresRate,
+        startNewGame,
+        reset_game,
+        isItBridge,
+        resetCardState,
+        showGameOverWidget,
+        closeGameOverWidget,
+        startLoadingAnimation,
+        finishLoadingAnimation,
+        getState: () => ({ ws, lobbyId, userId, userName, sessionToken, isHost, currentPlayer, game_over }),
+        setState: (state) => {
+            if ("ws" in state) ws = state.ws;
+            if ("lobbyId" in state) lobbyId = state.lobbyId;
+            if ("userId" in state) userId = state.userId;
+            if ("userName" in state) userName = state.userName;
+            if ("sessionToken" in state) sessionToken = state.sessionToken;
+            if ("isHost" in state) isHost = state.isHost;
+            if ("currentPlayer" in state) currentPlayer = state.currentPlayer;
+            if ("game_over" in state) game_over = state.game_over;
+        }
+    };
 }
