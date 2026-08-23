@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from src.connection.manager import ConnectionManager
@@ -226,7 +228,7 @@ async def test_disconnect_player_and_close_game(game):
     manager, handler = setup_manager(game)
     third = Player("third", FakeWebSocket(), "Third")
     third.hand = [Card("9", "♥")]
-    game.players.append(third)
+    manager.add_player(game, third)
     leaving = game.get_current_player()
     leaving.hand = [Card("Q", "♠")]
 
@@ -234,11 +236,11 @@ async def test_disconnect_player_and_close_game(game):
     assert leaving not in game.players
     assert not leaving.websocket.closed
     assert game.deck.bounce_deck
-    assert game in manager.games
+    assert game.game_id in manager.games
 
     await handler.handle_disconnect_game(third.user_id)
     assert not game.is_active
-    assert game not in manager.games
+    assert game.game_id not in manager.games
     assert game.players[0].websocket.closed
 
 
@@ -246,3 +248,19 @@ async def test_disconnect_player_and_close_game(game):
 async def test_disconnect_unknown_player_is_noop(game):
     _, handler = setup_manager(game)
     await handler.handle_disconnect_game("missing")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("player_count", [2, 3, 4])
+async def test_all_players_can_disconnect_concurrently(game, players, player_count):
+    manager, handler = setup_manager(game)
+    for player in players[2:player_count]:
+        manager.add_player(game, player)
+
+    await asyncio.gather(*(
+        handler.handle_disconnect_game(player.user_id, error=True)
+        for player in list(game.players)
+    ))
+
+    assert manager.get_game(game.game_id) is None
+    assert all(manager.get_game_by_player_id(player.user_id) is None for player in players[:player_count])

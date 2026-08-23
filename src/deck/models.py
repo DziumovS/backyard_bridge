@@ -38,9 +38,6 @@ class Deck:
     def __str__(self):
         return f"Deck has {len(self.deck)} cards left"
 
-    def __del__(self):
-        print("Deck has been deleted.")
-
     def create_deck(self) -> list[Card]:
         deck = [Card(rank, suit) for suit, rank in product(self.suits, self.ranks)]
         shuffle(deck)

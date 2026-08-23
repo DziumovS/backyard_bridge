@@ -64,7 +64,7 @@ async def test_lobby_rejects_full_ingame_and_duplicate_users(users):
     lobby = Lobby("abcdef", users[0])
     for user in users[1:]:
         lobby.add_user(user)
-    manager.lobbies[lobby.lobby_id] = lobby
+    manager.add_lobby(lobby)
     extra = User("extra", FakeWebSocket(), "Extra")
 
     await manager.handlers.handle_join_lobby(extra, extra.websocket, lobby.lobby_id)
@@ -85,9 +85,9 @@ async def test_lobby_rejects_full_ingame_and_duplicate_users(users):
 async def test_only_host_can_start_valid_lobby(users):
     manager = LobbyManager(ConnectionManager())
     lobby = Lobby("abcdef", users[0])
-    manager.lobbies[lobby.lobby_id] = lobby
+    manager.add_lobby(lobby)
     assert await manager.handlers.handle_start_game(users[0].user_id) is None
-    lobby.add_user(users[1])
+    manager.add_user(lobby, users[1])
     assert await manager.handlers.handle_start_game(users[1].user_id) is None
     result = await manager.handlers.handle_start_game(users[0].user_id)
     assert result[0] == lobby.lobby_id
@@ -97,7 +97,7 @@ async def test_only_host_can_start_valid_lobby(users):
 
 @pytest.mark.anyio
 async def test_game_websocket_rejects_missing_wrong_and_duplicate_session(game):
-    game_manager.games.clear()
+    game_manager.clear()
     game_manager.create_game(game)
     player = game.players[0]
 
@@ -117,7 +117,7 @@ async def test_game_websocket_rejects_missing_wrong_and_duplicate_session(game):
     duplicate = FakeWebSocket([{"type": "auth", "token": player.session_token}])
     await websocket_game(duplicate, game.game_id, player.user_id)
     assert duplicate.sent[-1]["msg"] == "This player is already connected."
-    game_manager.games.clear()
+    game_manager.clear()
 
 
 @pytest.mark.anyio

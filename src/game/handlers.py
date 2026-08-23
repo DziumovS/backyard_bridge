@@ -160,8 +160,20 @@ class EventHandler:
 
     async def handle_disconnect_game(self, player_id: str, error: bool = False) -> None:
         game = self.gm.get_game_by_player_id(player_id=player_id)
+        if game is None:
+            return
+
+        async with game.action_lock:
+            await self._handle_disconnect_game_locked(game, player_id, error)
+
+    async def _handle_disconnect_game_locked(self, game, player_id: str, error: bool) -> None:
+        if self.gm.get_game(game.game_id) is not game:
+            return
+
         if game:
             left_player = game.get_player_or_none(user_id=player_id)
+            if left_player is None:
+                return
 
             if player_id == game.get_current_player().user_id:
                 game.next_player()
@@ -171,7 +183,7 @@ class EventHandler:
 
             next_player = game.get_current_player()
 
-            game.remove_player(player=left_player)
+            self.gm.remove_player(game=game, player=left_player)
             safe_name = escape(left_player.user_name)
             message = f"Player <b>{safe_name}</b> has left the game."
 

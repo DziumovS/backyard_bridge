@@ -60,9 +60,6 @@ class Game:
 
         self.current_card = self.card_distribution()
 
-    def __del__(self):
-        print(f"Game '{self.game_id}' has been deleted.")
-
     async def _wait_for_startup_event(self, event: asyncio.Event) -> bool:
         try:
             await asyncio.wait_for(event.wait(), timeout=self.startup_timeout_seconds)

@@ -14,7 +14,35 @@ def test_game_manager_crud(game):
     assert manager.get_game_by_player_id("missing") is None
     manager.remove_game("missing")
     manager.remove_game(game.game_id)
-    assert manager.games == []
+    assert manager.games == {}
+
+
+def test_game_manager_keeps_player_index_in_sync(game, players):
+    manager = GameManager(ConnectionManager())
+    manager.create_game(game)
+    extra = players[2]
+
+    manager.add_player(game, extra)
+    assert manager.get_game_by_player_id(extra.user_id) is game
+
+    manager.remove_player(game, extra)
+    assert manager.get_game_by_player_id(extra.user_id) is None
+
+    manager.clear()
+    assert manager.games == {}
+    assert manager.get_game_by_player_id(game.players[0].user_id) is None
+
+
+def test_removing_player_preserves_current_player(game, players):
+    manager = GameManager(ConnectionManager())
+    manager.create_game(game)
+    manager.add_player(game, players[2])
+    game.current_player_index = 2
+    current_player = game.get_current_player()
+
+    manager.remove_player(game, game.players[0])
+
+    assert game.get_current_player() is current_player
 
 
 @pytest.mark.anyio

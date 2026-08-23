@@ -12,29 +12,55 @@ from src.game.handlers import EventHandler
 class GameManager:
     def __init__(self, manager: ConnectionManager):
         self.connection_manager = manager
-        self.games: list[Game] = []
+        self.games: dict[str, Game] = {}
+        self._game_ids_by_player: dict[str, str] = {}
         self.event_handler = EventHandler(game_manager_instance=self)
 
     def create_game(self, game: Game) -> None:
-        self.games.append(game)
+        self.games[game.game_id] = game
+        for player in game.players:
+            self._game_ids_by_player[player.user_id] = game.game_id
+
+    def add_player(self, game: Game, player: Player) -> None:
+        game.players.append(player)
+        self._game_ids_by_player[player.user_id] = game.game_id
+
+    def remove_player(self, game: Game, player: Player) -> None:
+        current_player_id = game.get_current_player().user_id if game.players else None
+        game.remove_player(player)
+        self._game_ids_by_player.pop(player.user_id, None)
+        if current_player_id and game.players:
+            preserved_index = next(
+                (
+                    index for index, current in enumerate(game.players)
+                    if current.user_id == current_player_id
+                ),
+                None,
+            )
+            game.current_player_index = (
+                preserved_index
+                if preserved_index is not None
+                else game.current_player_index % len(game.players)
+            )
+        else:
+            game.current_player_index = 0
 
     def remove_game(self, game_id: str) -> None:
-        game = self.get_game(game_id)
+        game = self.games.pop(game_id, None)
         if game:
-            self.games.remove(game)
+            for player in game.players:
+                self._game_ids_by_player.pop(player.user_id, None)
+
+    def clear(self) -> None:
+        self.games.clear()
+        self._game_ids_by_player.clear()
 
     def get_game(self, game_id: str) -> Game | None:
-        for game in self.games:
-            if game.game_id == game_id:
-                return game
-        return None
+        return self.games.get(game_id)
 
     def get_game_by_player_id(self, player_id: str) -> Game | None:
-        for game in self.games:
-            for player in game.players:
-                if player.user_id == player_id:
-                    return game
-        return None
+        game_id = self._game_ids_by_player.get(player_id)
+        return self.games.get(game_id) if game_id else None
 
     async def abort_startup(self, game: Game, websocket: WebSocket) -> None:
         game.is_active = False

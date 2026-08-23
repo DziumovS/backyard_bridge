@@ -31,7 +31,7 @@ def test_lobby_model(users):
 def test_lobby_manager_lookup_and_id(users, monkeypatch):
     manager = LobbyManager(ConnectionManager())
     first = Lobby("taken", users[0])
-    manager.lobbies[first.lobby_id] = first
+    manager.add_lobby(first)
     values = iter(["taken", "free"])
     monkeypatch.setattr("src.lobby.manager.secrets.token_hex", lambda _: next(values))
     assert manager.generate_lobby_id() == "free"
@@ -39,6 +39,8 @@ def test_lobby_manager_lookup_and_id(users, monkeypatch):
     assert manager.get_lobby("missing") is None
     assert manager.get_lobby_by_user_id(users[0].user_id) is first
     assert manager.get_lobby_by_user_id("missing") is None
+    manager.remove_lobby(first.lobby_id)
+    assert manager.get_lobby_by_user_id(users[0].user_id) is None
 
 
 @pytest.mark.anyio
@@ -80,7 +82,7 @@ async def test_host_disconnect_broadcasts_start(users):
     lobby = Lobby("lobby", users[0])
     lobby.add_user(users[1])
     lobby.in_game = True
-    manager.lobbies[lobby.lobby_id] = lobby
+    manager.add_lobby(lobby)
 
     await manager.handlers.handle_disconnect_lobby(users[0].user_id, error=True)
 
@@ -101,7 +103,7 @@ async def test_concurrent_lobby_disconnects_are_serialized(users):
     lobby = Lobby("lobby", users[0])
     lobby.add_user(users[1])
     lobby.in_game = True
-    manager.lobbies[lobby.lobby_id] = lobby
+    manager.add_lobby(lobby)
 
     await asyncio.gather(
         manager.handlers.handle_disconnect_lobby(users[0].user_id, error=True),
@@ -122,7 +124,7 @@ async def test_duplicate_concurrent_guest_disconnect_is_safe(users):
     manager = LobbyManager(SlowConnectionManager())
     lobby = Lobby("lobby", users[0])
     lobby.add_user(users[1])
-    manager.lobbies[lobby.lobby_id] = lobby
+    manager.add_lobby(lobby)
 
     await asyncio.gather(
         manager.handlers.handle_disconnect_lobby(users[1].user_id, error=True),

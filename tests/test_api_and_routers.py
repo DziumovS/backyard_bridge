@@ -18,11 +18,11 @@ from tests.conftest import FakeWebSocket
 
 @pytest.fixture(autouse=True)
 def clear_global_state():
-    lobby_manager.lobbies.clear()
-    game_manager.games.clear()
+    lobby_manager.clear()
+    game_manager.clear()
     yield
-    lobby_manager.lobbies.clear()
-    game_manager.games.clear()
+    lobby_manager.clear()
+    game_manager.clear()
 
 
 def test_http_endpoints():

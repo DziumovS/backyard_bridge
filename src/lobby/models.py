@@ -13,9 +13,6 @@ class Lobby:
         self.disconnect_lock = asyncio.Lock()
         self.users: dict[str, User] = {host.user_id: host}
 
-    def __del__(self):
-        print(f"Lobby '{self.lobby_id}' has been deleted.")
-
     def is_host(self, user_id: str) -> bool:
         return self.host.user_id == user_id
 

@@ -22,7 +22,7 @@ class LobbyHandlers:
     async def handle_create_lobby(self, user: User, websocket: WebSocket) -> None:
         lobby_id = self.lobby_manager.generate_lobby_id()
         lobby = Lobby(lobby_id=lobby_id, host=user)
-        self.lobby_manager.lobbies[lobby_id] = lobby
+        self.lobby_manager.add_lobby(lobby)
 
         message = f"You have created a lobby with ID: <b>{lobby_id}</b>"
 
@@ -51,7 +51,7 @@ class LobbyHandlers:
             )
             return
 
-        lobby.add_user(user)
+        self.lobby_manager.add_user(lobby, user)
         message = f"You have joined the lobby with ID: <b>{lobby_id}</b>"
         await self.connection_manager.send_message(
             websocket=websocket,
@@ -82,7 +82,7 @@ class LobbyHandlers:
                 user = lobby.get_user(user_id=user_id)
                 if user is None:
                     return
-                lobby.remove_user(user_id)
+                self.lobby_manager.remove_user(lobby, user_id)
                 if lobby.is_host(user_id):
                     remaining_users = list(lobby.users.values())
                     await self.connection_manager.broadcast(
@@ -94,7 +94,7 @@ class LobbyHandlers:
                     for remaining in remaining_users:
                         await self.connection_manager.disconnect(websocket=remaining.websocket)
 
-                    self.lobby_manager.lobbies.pop(lobby.lobby_id, None)
+                    self.lobby_manager.remove_lobby(lobby.lobby_id)
                 else:
                     await self.connection_manager.broadcast(
                         websockets=lobby.get_users_websocket(),
