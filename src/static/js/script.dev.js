@@ -42,6 +42,9 @@ const elements = {
     gameOverWidget: document.getElementById("game-over-widget"),
     playerContainer: document.getElementById("playerContainer"),
     welcomeMessage: document.getElementById("welcomeMessage"),
+    rulesButton: document.getElementById("rulesButton"),
+    continueGameButton: document.getElementById("continueGameButton"),
+    leaveGameButton: document.getElementById("leaveGameButton"),
 };
 
 
@@ -58,6 +61,15 @@ elements.nameInput.addEventListener("input", function () {
     document.getElementById("changeName").disabled = inputText.length === 0;
 });
 
+elements.nameForm.addEventListener("submit", updateUsername);
+elements.rulesButton.addEventListener("click", showRulesWidget);
+elements.joinLobbyButton.addEventListener("click", joinLobby);
+elements.createLobbyButton.addEventListener("click", createLobby);
+elements.startButton.addEventListener("click", startGame);
+elements.leaveLobbyButton.addEventListener("click", leaveLobby);
+elements.continueGameButton.addEventListener("click", startNewGame);
+elements.leaveGameButton.addEventListener("click", leaveGameFromWidget);
+
 
 function getWsBaseUrl(path) {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -67,6 +79,11 @@ function getWsBaseUrl(path) {
 
 function getHttpBaseUrl(path = "") {
     return `${window.location.origin}${path}`;
+}
+
+
+function leaveGameFromWidget() {
+    return backToHomePage("Thanks for playing! Bye!", 0.3);
 }
 
 
@@ -995,6 +1012,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         elements,
         getWsBaseUrl,
         getHttpBaseUrl,
+        leaveGameFromWidget,
         updateUsername,
         setLobbyUI,
         createLobby,

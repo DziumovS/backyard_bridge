@@ -17,6 +17,7 @@ document.body.innerHTML = `
   <div id="game-over-widget"><div class="results-column"><p></p></div></div>
   <div id="playerContainer"></div><div id="welcomeMessage"></div>
   <button id="continueGameButton"></button>
+  <button id="leaveGameButton"></button>
   <div id="overlay"><div class="progress"></div></div>
 `;
 

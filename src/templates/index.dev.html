@@ -14,7 +14,7 @@
     <body>
         <header>
             <h1>Backyard Bridge</h1>
-            <button id="rulesButton" onclick="showRulesWidget()">Rules</button>
+            <button id="rulesButton">Rules</button>
         </header>
 
         <div class="content">
@@ -26,11 +26,11 @@
                         <p class="name-container">
                             Your name:
                             <span id="ws-id" class="hidden"></span>
-                            <form id="nameForm" onsubmit="updateUsername(event)" class="name-form">
-                                <input type="text" id="nameInput" maxlength="13" class="name-input" />
-                                <button id="changeName" type="submit" disabled>Change name</button>
-                            </form>
                         </p>
+                        <form id="nameForm" class="name-form">
+                            <input type="text" id="nameInput" maxlength="13" class="name-input" />
+                            <button id="changeName" type="submit" disabled>Change name</button>
+                        </form>
                     </div>
 
                     <div class="playerScore">
@@ -61,18 +61,18 @@
 
                 <div class="joinLobbyControls">
                     <input type="text" id="lobbyInput" placeholder="Enter lobby ID" />
-                    <button id="joinLobbyButton" onclick="joinLobby()" disabled>Join Lobby</button>
+                    <button id="joinLobbyButton" disabled>Join Lobby</button>
                 </div>
 
-                <button id="createLobbyButton" onclick="createLobby()">New Game</button>
+                <button id="createLobbyButton">New Game</button>
 
                 <div id="lobbyControls" style="display: none;">
 
                     <h2 id="lobbyMessage"></h2>
 
                     <div class="buttonContainer">
-                        <button id="startButton" onclick="startGame()" style="display: none;" disabled>Start Game</button>
-                        <button id="leaveButton" onclick="leaveLobby()" style="display: none;">Leave Lobby</button>
+                        <button id="startButton" style="display: none;" disabled>Start Game</button>
+                        <button id="leaveButton" style="display: none;">Leave Lobby</button>
                     </div>
 
                 </div>
@@ -86,11 +86,11 @@
                 </div>
 
                 <div class="betweenCurrentCards">
-                    <div id="scores-rate-now" onclick="">
+                    <div id="scores-rate-now">
                         <p>Scores rate:</p>
                         <p class="scores-rate" id="scoresRate"></p>
                     </div>
-                    <div id="cards-left" onclick="">
+                    <div id="cards-left">
                         <p>Cards left:</p>
                         <p class="deck-len" id="cardsLeft"></p>
                     </div>
@@ -135,8 +135,8 @@
                     </div>
 
                     <div class="gameOverButtons">
-                        <button id="continueGameButton" onclick="startNewGame()">Start Game</button>
-                        <button id="leaveGameButton" onclick="backToHomePage('Thanks for playing! Bye!', 0.3)">Leave Game</button>
+                        <button id="continueGameButton">Start Game</button>
+                        <button id="leaveGameButton">Leave Game</button>
                     </div>
 
                 </div>

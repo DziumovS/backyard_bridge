@@ -637,7 +637,7 @@ describe("messages, rules, scores and loading", () => {
     );
     await vi.runAllTimersAsync();
 
-    const navigation = app.backToHomePage("Bye", 0.1);
+    const navigation = app.leaveGameFromWidget();
     await vi.runAllTimersAsync();
     await navigation;
     expect(window.location.href).toBe("http://localhost:8000");
