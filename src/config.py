@@ -1,0 +1,15 @@
+import os
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_ALLOWED_ORIGINS = (
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+)
+
+
+def get_allowed_origins(value: str | None = None) -> list[str]:
+    configured = value if value is not None else os.getenv("BACKYARD_BRIDGE_ALLOWED_ORIGINS", "")
+    origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return origins or list(DEFAULT_ALLOWED_ORIGINS)

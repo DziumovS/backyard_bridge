@@ -4,8 +4,8 @@ Multiplayer card game, very similar to UNO.
 There are no winners. Only losers.
 
 ### DEMO
-To try the game you can get a temporary link in `ngrok`: `ngrok http 8000`,  
-remembering to specify it in `origins` list in `main.py`.
+To expose a local server temporarily, run `ngrok http 8000` and add its HTTPS
+origin to `BACKYARD_BRIDGE_ALLOWED_ORIGINS`.
 
 ---
 
@@ -52,8 +52,50 @@ In these cases, all players will be given points based on their cards in their h
 The object of the game is to get rid of the cards in your hand as quickly as possible without scoring more than 125 points.
 
 ---
-## DEPLOY
-1) Clone this repo
-2) Install dependencies: `pip install -r requirements.txt`
-3) From `src/utils/` run `create_card_imgs.py` to create cards images
-4) And run common `uvicorn main:app --reload`
+## LOCAL DEVELOPMENT
+
+Requires Python 3.13+ and Node.js 22+.
+
+```bash
+python -m venv venv
+venv/bin/python -m pip install -r requirements-dev.txt
+npm ci
+npm run build
+venv/bin/uvicorn main:app --reload
+```
+
+The editable frontend sources are `src/static/js/script.dev.js`,
+`src/static/css/styles.dev.css`, and `src/templates/index.dev.html`. Run
+`npm run build` after changing them; `npm test` verifies that committed
+production assets are current.
+
+## TESTS
+
+```bash
+venv/bin/python -m pytest
+npm test
+```
+
+The server suite includes real WebSocket sessions for every supported player
+count (2, 3, and 4). Both server and client coverage thresholds are at least
+99%. GitHub Actions runs both suites for pushes and pull requests.
+
+## DEPLOYMENT
+
+Install `requirements.txt`, build the frontend with `npm ci && npm run build`,
+and start the ASGI application:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Configure comma-separated browser/mobile origins when the frontend is hosted
+separately from the API:
+
+```bash
+BACKYARD_BRIDGE_ALLOWED_ORIGINS=https://game.example,capacitor://localhost
+```
+
+`GET /health` is available for platform health checks. WebSocket connections
+remain client-to-server by design; all authoritative game state and rule
+validation stay on the backend.

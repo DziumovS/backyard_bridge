@@ -33,6 +33,12 @@ def test_http_endpoints():
     assert "script.js" in response.text
     assert "user-scalable=no" not in response.text
     assert 'aria-live="polite"' in response.text
+    assert "onclick=" not in response.text
+    assert response.headers["content-security-policy"].startswith("default-src 'self'")
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert client.get("/health").json() == {"status": "ok"}
 
     rules = client.get("/rules")
     assert rules.status_code == 200 and "MAIN RULES" in rules.json()["rules"]
