@@ -134,7 +134,8 @@ async def _connect_game_clients(ws_base, game_id, sessions):
 
 def _assert_synchronized(states):
     public_keys = (
-        "deck_len", "chosen_suit", "current_card", "scores_rate", "round_over", "players_hands",
+        "deck_len", "chosen_suit", "current_card", "scores_rate", "scores_rate_changed", "round_over",
+        "players_hands",
     )
     reference = states[next(iter(states))]
     for player_id, state in states.items():

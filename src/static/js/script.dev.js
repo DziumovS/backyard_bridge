@@ -10,6 +10,8 @@ let game_over = false;
 let errorTimeout;
 let loadingTimeout;
 let loadingFailureTimeout;
+let scoresRateAnimationTimeout;
+let lastScoresRate = "x1";
 let cardImagesReady = Promise.resolve();
 
 
@@ -235,7 +237,7 @@ function handleWebSocketMessage(event) {
         case "gd":
             isHost = data.is_host;
             if (data.players) ensureGamePlayers(data.players);
-            checkScoresRate(data.scores_rate);
+            checkScoresRate(data.scores_rate, data.scores_rate_changed === true);
             updatePlayerHand(data.hand, data.current_player, data.playable_cards, "current");
             updateOpponentData(data.players_hands);
             updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit, data.player_options);
@@ -341,7 +343,7 @@ function setGameUI() {
     elements.playerContainer.style.display = "flex";
     elements.nameAndScores.style.flexDirection = "row";
     elements.pS.innerHTML = "0";
-    elements.scoresRate.innerHTML = "x1";
+    resetScoresRate();
     elements.playerScores.style.display = "block";
 
     elements.usersHeader.style.fontSize = "12px";
@@ -892,15 +894,27 @@ async function backToHomePage(message, seconds) {
 }
 
 
-function checkScoresRate(scoresRate) {
-    if (scoresRate !== elements.scoresRate.innerHTML) {
-        elements.scoresRate.innerHTML = scoresRate;
-        elements.scoresRate.classList.add("wave-effect");
+function checkScoresRate(scoresRate, scoresRateChanged = false) {
+    if (scoresRate === lastScoresRate) return;
 
-        setTimeout(() => {
-            elements.scoresRate.classList.remove("wave-effect");
-        }, 5000);
-    }
+    lastScoresRate = scoresRate;
+    elements.scoresRate.textContent = scoresRate;
+    if (!scoresRateChanged) return;
+
+    elements.scoresRate.classList.add("scores-rate-change");
+    clearTimeout(scoresRateAnimationTimeout);
+    scoresRateAnimationTimeout = setTimeout(() => {
+        elements.scoresRate.classList.remove("scores-rate-change");
+    }, 5000);
+}
+
+
+function resetScoresRate() {
+    clearTimeout(scoresRateAnimationTimeout);
+    scoresRateAnimationTimeout = undefined;
+    lastScoresRate = "x1";
+    elements.scoresRate.textContent = lastScoresRate;
+    elements.scoresRate.classList.remove("scores-rate-change");
 }
 
 
@@ -914,7 +928,7 @@ function startNewGame() {
 function reset_game(playersScores, playerScores) {
     closeGameOverWidget();
     elements.pS.textContent = playerScores;
-    elements.scoresRate.innerHTML = "x1";
+    resetScoresRate();
 
     playersScores.forEach(player => {
         const oS = document.getElementById(`${player.player_id}_oS`);
@@ -1056,6 +1070,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         closeRulesWidget,
         backToHomePage,
         checkScoresRate,
+        resetScoresRate,
         startNewGame,
         reset_game,
         isItBridge,

@@ -172,6 +172,34 @@ async def test_optional_draw_with_playable_card_allows_skip(game):
 
 
 @pytest.mark.anyio
+async def test_scores_rate_change_is_announced_only_when_discard_pile_flips(game):
+    _, handler = setup_manager(game)
+    current = game.get_current_player()
+    game.current_card = Card("8", "♠")
+    game.deck.deck = [Card("9", "♣")]
+    game.deck.bounce_deck = [Card("Q", "♥"), Card("K", "♦")]
+    current.options.must_draw = 2
+    current.options.must_skip = True
+    current.options.can_draw = False
+
+    await handler.handle_drew_card(game, current.user_id)
+    assert game.deck.scores_rate == 1
+    assert all(player.websocket.sent[-1]["scores_rate_changed"] is False for player in game.players)
+
+    await handler.handle_drew_card(game, current.user_id)
+    assert game.deck.scores_rate == 2
+    assert all(player.websocket.sent[-1]["scores_rate_changed"] is True for player in game.players)
+
+    await handler.handle_skip_turn(game, current.user_id)
+    assert all(player.websocket.sent[-1]["scores_rate_changed"] is False for player in game.players)
+
+    next_player = game.get_current_player()
+    await handler.handle_drew_card(game, next_player.user_id)
+    assert game.deck.scores_rate == 2
+    assert all(player.websocket.sent[-1]["scores_rate_changed"] is False for player in game.players)
+
+
+@pytest.mark.anyio
 async def test_skip_turn_updates_suit_and_broadcasts(game):
     _, handler = setup_manager(game)
     current = game.get_current_player()

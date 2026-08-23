@@ -481,7 +481,11 @@ button:active {
     opacity: 0;
 }
 
-.wave-effect::after {
+.scores-rate-change {
+    animation: waveText 0.7s ease-out 5;
+}
+
+.scores-rate-change::after {
     animation: wave 0.7s ease-out 5;
 }
 

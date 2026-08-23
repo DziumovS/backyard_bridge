@@ -67,6 +67,7 @@ beforeEach(() => {
   app.elements.usersList.innerHTML = "";
   app.elements.rightCard.innerHTML = '<img src="/right.png">';
   app.elements.leftCard.innerHTML = '<img src="/static/cards/closed_card.png">';
+  app.resetScoresRate();
 });
 
 describe("URLs, identity and lobby", () => {
@@ -557,11 +558,30 @@ describe("messages, rules, scores and loading", () => {
     app.closeRulesWidget();
   });
 
-  test("updates scores and game-over controls", () => {
+  test("animates the score rate only when its value changes", async () => {
     vi.useFakeTimers();
-    app.elements.scoresRate.innerHTML = "x1";
-    app.checkScoresRate("x2");
-    app.checkScoresRate("x2");
+    app.checkScoresRate("x2", true);
+    expect(app.elements.scoresRate.classList.contains("scores-rate-change")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(app.elements.scoresRate.classList.contains("scores-rate-change")).toBe(false);
+
+    app.checkScoresRate("x2", true);
+    expect(app.elements.scoresRate.classList.contains("scores-rate-change")).toBe(false);
+
+    app.checkScoresRate("x3", false);
+    expect(app.elements.scoresRate.classList.contains("scores-rate-change")).toBe(false);
+    app.checkScoresRate("x4", true);
+    expect(app.elements.scoresRate.classList.contains("scores-rate-change")).toBe(true);
+
+    app.resetScoresRate();
+    expect(app.elements.scoresRate.textContent).toBe("x1");
+    expect(app.elements.scoresRate.classList.contains("scores-rate-change")).toBe(false);
+    app.checkScoresRate("x2", true);
+    expect(app.elements.scoresRate.classList.contains("scores-rate-change")).toBe(true);
+  });
+
+  test("updates scores and game-over controls", () => {
     app.updateUsers([{ user_id: "me", user_name: "Me" }], false);
     app.showGameOverWidget("Results", [{ player_id: "me", scores: 12 }], 12, true);
     expect(document.getElementById("continueGameButton").style.display).toBe("inline");

@@ -81,8 +81,15 @@ class GameManager:
             }
         )
 
-    async def send_game_data(self, player: Player, current_player: bool, game: Game,
-                             chosen_suit: dict | None = None, playable_cards: bool = True) -> None:
+    async def send_game_data(
+        self,
+        player: Player,
+        current_player: bool,
+        game: Game,
+        chosen_suit: dict | None = None,
+        playable_cards: bool = True,
+        scores_rate_changed: bool = False,
+    ) -> None:
 
         cards = player.prepare_playable_cards(game=game, chosen_suit=chosen_suit, playable_cards=playable_cards)
 
@@ -98,6 +105,7 @@ class GameManager:
                 "current_card": game.current_card_to_dict(),
                 "player_options": player.options_to_dict(),
                 "scores_rate": f"x{game.deck.scores_rate}",
+                "scores_rate_changed": scores_rate_changed,
                 "is_host": player.user_id == game.host_id,
                 "round_over": game.round_over,
                 "players": [
@@ -114,6 +122,7 @@ class GameManager:
         current_player_id: str,
         chosen_suit: dict | None = None,
         playable_cards: bool = True,
+        scores_rate_changed: bool = False,
     ) -> None:
         await asyncio.gather(*(
             self.send_game_data(
@@ -122,6 +131,7 @@ class GameManager:
                 game=game,
                 chosen_suit=chosen_suit,
                 playable_cards=playable_cards,
+                scores_rate_changed=scores_rate_changed,
             )
             for player in game.players
         ))

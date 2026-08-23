@@ -318,7 +318,9 @@ class EventHandler:
             raise InvalidAction("You cannot draw a card now.")
         if game.deck.is_decks_empty():
             raise InvalidAction("There are no cards left to draw.")
+        previous_scores_rate = game.deck.scores_rate
         current_player.draw_card(deck=game.deck)
+        scores_rate_changed = game.deck.scores_rate != previous_scores_rate
         await self._broadcast_draw_animation(game, current_player)
 
         playable_cards = current_player.get_playable_cards(current_card=game.current_card, chosen_suit=game.chosen_suit)
@@ -340,6 +342,7 @@ class EventHandler:
             game=game,
             current_player_id=current_player.user_id,
             chosen_suit=game.chosen_suit,
+            scores_rate_changed=scores_rate_changed,
         )
 
     async def handle_skip_turn(self, game, player_id: str | None = None) -> None:

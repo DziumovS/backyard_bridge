@@ -65,6 +65,10 @@ async def test_game_manager_sends_turn_and_private_state(game):
     assert state["current_player"] is True
     assert state["deck_len"] == len(game.deck)
     assert state["scores_rate"] == "x1"
+    assert state["scores_rate_changed"] is False
+
+    await manager.send_game_data(player, True, game, scores_rate_changed=True)
+    assert player.websocket.sent[-1]["scores_rate_changed"] is True
 
 
 @pytest.mark.anyio
