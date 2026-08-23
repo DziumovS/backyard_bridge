@@ -8,6 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "backyard-bridge-build-"));
 const javascriptOutput = join(temporaryDirectory, "script.js");
 const cssOutput = join(temporaryDirectory, "styles.css");
+const htmlOutput = join(temporaryDirectory, "index.html");
 const executableSuffix = process.platform === "win32" ? ".cmd" : "";
 
 try {
@@ -33,10 +34,23 @@ try {
     ],
     { stdio: "inherit" }
   );
+  execFileSync(
+    process.execPath,
+    [
+      join(root, "node_modules/html-minifier-terser/cli.js"),
+      join(root, "src/templates/index.dev.html"),
+      "--collapse-whitespace",
+      "--remove-comments",
+      "--output",
+      htmlOutput
+    ],
+    { stdio: "inherit" }
+  );
 
   const assets = [
     [javascriptOutput, join(root, "src/static/js/script.js")],
-    [cssOutput, join(root, "src/static/css/styles.css")]
+    [cssOutput, join(root, "src/static/css/styles.css")],
+    [htmlOutput, join(root, "src/templates/index.html")]
   ];
   const staleAssets = assets
     .filter(([generated, committed]) => !readFileSync(generated).equals(readFileSync(committed)))

@@ -4,13 +4,15 @@
   "scripts": {
     "build:js": "terser src/static/js/script.dev.js --compress --mangle --output src/static/js/script.js",
     "build:css": "lightningcss src/static/css/styles.dev.css --minify --output-file src/static/css/styles.css",
-    "build": "npm run build:js && npm run build:css",
+    "build:html": "html-minifier-terser src/templates/index.dev.html --collapse-whitespace --remove-comments --output src/templates/index.html",
+    "build": "npm run build:js && npm run build:css && npm run build:html",
     "build:check": "node scripts/check-build.mjs",
     "test:client": "vitest run --coverage",
     "test": "npm run build:check && npm run test:client"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "4.1.11",
+    "html-minifier-terser": "^7.2.0",
     "jsdom": "30.0.1",
     "lightningcss-cli": "1.33.0",
     "terser": "5.50.0",

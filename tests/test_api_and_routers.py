@@ -31,6 +31,8 @@ def test_http_endpoints():
     assert response.status_code == 200
     assert "Backyard Bridge" in response.text
     assert "script.js" in response.text
+    assert "user-scalable=no" not in response.text
+    assert 'aria-live="polite"' in response.text
 
     rules = client.get("/rules")
     assert rules.status_code == 200 and "MAIN RULES" in rules.json()["rules"]

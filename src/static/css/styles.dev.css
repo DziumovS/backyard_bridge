@@ -143,7 +143,8 @@ input {
 
 input[type="text"]:focus,
 button:focus {
-    outline: none;
+    outline: 3px solid #ffa500;
+    outline-offset: 2px;
 }
 
 
@@ -431,6 +432,14 @@ button:active {
     flex-direction: column;
 }
 
+.current-card:focus-visible,
+.card:focus-visible,
+.jack-widget-grid div:focus-visible {
+    outline: 3px solid #ffa500;
+    outline-offset: 4px;
+    border-radius: 15px;
+}
+
 .betweenCurrentCards {
     display: flex;
     gap: 45px;
@@ -616,4 +625,41 @@ footer p {
     height: 100%;
     background-color: rgba(255, 165, 0, 1);
     border-radius: 15px;
+}
+
+@media (max-width: 600px), (max-height: 650px) {
+    h1 {
+        font-size: 24px;
+    }
+
+    #currentCards {
+        top: 48%;
+        gap: 12px;
+    }
+
+    #playerContainer,
+    #playerHand {
+        height: 175px;
+    }
+
+    .card,
+    .current-card {
+        width: 80px;
+        height: 120px;
+    }
+
+    .betweenCurrentCards {
+        gap: 24px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport"
-              content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
+              content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
         <meta http-equiv="X-UA-Compatible" content="ie=edge">
         <link href="{{ url_for('static', path='/css/styles.css') }}" rel="stylesheet">
@@ -56,7 +56,7 @@
             <div class="preLobbyControls">
                 <h2 id="welcomeMessage">To start the game create a lobby or join your friends by their lobby ID!</h2>
                 <div class="errorMessage">
-                    <div id="errorMessage"></div>
+                    <div id="errorMessage" role="alert" aria-live="assertive"></div>
                 </div>
 
                 <div class="joinLobbyControls">
@@ -81,7 +81,7 @@
 
             <div id="currentCards" style="display: none;">
 
-                <div class="current-card" id="leftCard" onclick="drawCard()">
+                <div class="current-card" id="leftCard" role="button" aria-disabled="true" tabindex="-1">
                     <img src="/static/cards/closed_card.png" alt="closed_card" />
                 </div>
 
@@ -96,7 +96,7 @@
                     </div>
                 </div>
 
-                <div class="current-card" id="rightCard" onclick="skip_turn()"></div>
+                <div class="current-card" id="rightCard" role="button" aria-disabled="true" tabindex="-1"></div>
 
             </div>
 
@@ -142,7 +142,7 @@
                 </div>
             </div>
 
-            <div id="overlay">
+            <div id="overlay" role="status" aria-live="polite" aria-label="Loading game">
                 <div class="loader">
                     <div class="progress-bar">
                         <div class="progress"></div>
@@ -155,7 +155,7 @@
         <footer>
             <div id="playerContainer">
 
-                <p class="turnText" id="turnText"></p>
+                <p class="turnText" id="turnText" aria-live="polite"></p>
 
                 <div id="playerHand"></div>
 

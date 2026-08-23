@@ -374,6 +374,8 @@ describe("turn actions and widgets", () => {
     app.checkCurrentPlayerOptions({ must_draw: 1, must_skip: false, can_draw: false, can_skip: false });
     app.elements.leftCard.onclick();
     app.checkCurrentPlayerOptions({ must_draw: 0, must_skip: true, can_draw: false, can_skip: false });
+    expect(app.elements.rightCard.getAttribute("aria-disabled")).toBe("false");
+    expect(app.elements.rightCard.tabIndex).toBe(0);
     app.elements.rightCard.onclick();
     expect(socket.sent.at(-1).type).toBe("st");
     app.checkCurrentPlayerOptions({ must_draw: 0, must_skip: false, can_draw: true, can_skip: true });
@@ -384,6 +386,25 @@ describe("turn actions and widgets", () => {
     app.colorSkipTurn();
     app.setDefaultDrawCard();
     app.setDefaultSkipTurn();
+    expect(app.elements.rightCard.getAttribute("aria-disabled")).toBe("true");
+    expect(app.elements.rightCard.tabIndex).toBe(-1);
+  });
+
+  test("activates playable cards from the keyboard", () => {
+    const action = vi.fn();
+    const preventDefault = vi.fn();
+    app.setCardAction(app.elements.rightCard, action, "Skip turn");
+
+    app.activateWithKeyboard({ key: "Escape", currentTarget: app.elements.rightCard, preventDefault });
+    expect(action).not.toHaveBeenCalled();
+    app.activateWithKeyboard({ key: "Enter", currentTarget: app.elements.rightCard, preventDefault });
+    app.activateWithKeyboard({ key: " ", currentTarget: app.elements.rightCard, preventDefault });
+
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(preventDefault).toHaveBeenCalledTimes(2);
+    expect(app.elements.rightCard.getAttribute("aria-label")).toBe("Skip turn");
+    app.clearCardAction(app.elements.rightCard);
+    expect(app.elements.rightCard.hasAttribute("aria-label")).toBe(false);
   });
 
   test("keeps Ace-forced skip highlighted after opponent animation finishes", async () => {

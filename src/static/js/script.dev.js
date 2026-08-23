@@ -479,6 +479,35 @@ function toggleStartButton(enable) {
 }
 
 
+function activateWithKeyboard(event) {
+    if ((event.key === "Enter" || event.key === " ") && typeof event.currentTarget.onclick === "function") {
+        event.preventDefault();
+        event.currentTarget.onclick();
+    }
+}
+
+
+function setCardAction(element, action, label) {
+    element.onclick = action;
+    element.onkeydown = activateWithKeyboard;
+    element.style.cursor = "pointer";
+    element.tabIndex = 0;
+    element.setAttribute("role", "button");
+    element.setAttribute("aria-disabled", "false");
+    element.setAttribute("aria-label", label);
+}
+
+
+function clearCardAction(element) {
+    element.onclick = null;
+    element.onkeydown = null;
+    element.style.cursor = "default";
+    element.tabIndex = -1;
+    element.setAttribute("aria-disabled", "true");
+    element.removeAttribute("aria-label");
+}
+
+
 function updatePlayerHand(hand, player, playableCards, whose) {
     elements.playerHand.innerHTML = "";
 
@@ -511,8 +540,7 @@ function updatePlayerHand(hand, player, playableCards, whose) {
         if (player && isPlayable) {
             cardDiv.classList.add("highlighted-card-img");
             cardDiv.style.bottom = "50px";
-            cardDiv.onclick = () => playCard(card, whose);
-            cardDiv.style.cursor = "pointer";
+            setCardAction(cardDiv, () => playCard(card, whose), `Play ${card.rank} ${card.suit}`);
         }
 
         const cardImage = document.createElement("img");
@@ -739,8 +767,7 @@ function showJackWidget(card) {
 
     const playerCards = elements.playerHand.querySelectorAll(".card");
     playerCards.forEach(cardDiv => {
-        cardDiv.onclick = null;
-        cardDiv.style.cursor = "default";
+        clearCardAction(cardDiv);
         cardDiv.style.bottom = "10px";
         cardDiv.classList.remove("highlighted-card-img");
     });
@@ -752,13 +779,13 @@ function showJackWidget(card) {
         let newCell = cell.cloneNode(true);
         cell.replaceWith(newCell);
 
-        newCell.addEventListener("click", function() {
+        setCardAction(newCell, function() {
             const selectedSuit = suits[index];
 
             elements.jackWidget.style.display = "none";
 
             ws.send(JSON.stringify({ type: "pc", card: card, chosen_suit: selectedSuit }));
-        });
+        }, `Choose ${suits[index]} suit`);
     });
 }
 
@@ -770,22 +797,18 @@ function checkCurrentPlayerOptions(playerOptions) {
     if (currentPlayer === userId) {
         if (playerOptions.must_draw) {
             colorDrawCard();
-            elements.leftCard.style.cursor = "pointer";
-            elements.leftCard.onclick = drawCard;
+            setCardAction(elements.leftCard, drawCard, "Draw a card");
         } else if (playerOptions.must_skip) {
             colorSkipTurn();
-            elements.rightCard.style.cursor = "pointer";
-            elements.rightCard.onclick = skip_turn;
+            setCardAction(elements.rightCard, skip_turn, "Skip turn");
         } else {
             if (playerOptions.can_draw) {
                 colorDrawCard();
-                elements.leftCard.style.cursor = "pointer";
-                elements.leftCard.onclick = drawCard;
+                setCardAction(elements.leftCard, drawCard, "Draw a card");
             }
             if (playerOptions.can_skip) {
                 colorSkipTurn();
-                elements.rightCard.style.cursor = "pointer";
-                elements.rightCard.onclick = skip_turn;
+                setCardAction(elements.rightCard, skip_turn, "Skip turn");
             }
         }
     }
@@ -796,8 +819,7 @@ function setDefaultDrawCard() {
     if (currentPlayer === userId) {
         removeHighlighted("#leftCard img");
     }
-    elements.leftCard.style.cursor = "default";
-    elements.leftCard.onclick = null;
+    clearCardAction(elements.leftCard);
 }
 
 
@@ -805,8 +827,7 @@ function setDefaultSkipTurn() {
     if (currentPlayer === userId) {
         removeHighlighted("#rightCard img");
     }
-    elements.rightCard.style.cursor = "default";
-    elements.rightCard.onclick = null;
+    clearCardAction(elements.rightCard);
 }
 
 
@@ -889,21 +910,20 @@ function isItBridge(card) {
     setTimeout(() => {
         elements.leftCard.querySelector("img").src = "/static/cards/bridge.png";
         elements.leftCard.querySelector("img").alt = "bridge";
-        elements.leftCard.style.cursor = "pointer";
         colorDrawCard();
 
-        elements.leftCard.onclick = () => {
+        setCardAction(elements.leftCard, () => {
             ws.send(JSON.stringify({ type: "go" }));
             resetCardState(card);
-        };
+        }, "Finish bridge");
 
         elements.rightCard.querySelector("img").src = "/static/cards/continue.png";
         elements.rightCard.querySelector("img").alt = "continue";
 
-        elements.rightCard.onclick = () => {
+        setCardAction(elements.rightCard, () => {
             skip_turn();
             resetCardState(card);
-        };
+        }, "Continue game");
     }, 50);
 }
 
@@ -1010,6 +1030,9 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         checkCurrentPlayerOptions,
         setDefaultDrawCard,
         setDefaultSkipTurn,
+        activateWithKeyboard,
+        setCardAction,
+        clearCardAction,
         removeHighlighted,
         showRulesWidget,
         closeRulesWidget,
