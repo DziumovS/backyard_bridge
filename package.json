@@ -2,12 +2,18 @@
   "name": "backyard-bridge-client",
   "private": true,
   "scripts": {
+    "build:js": "terser src/static/js/script.dev.js --compress --mangle --output src/static/js/script.js",
+    "build:css": "lightningcss src/static/css/styles.dev.css --minify --output-file src/static/css/styles.css",
+    "build": "npm run build:js && npm run build:css",
+    "build:check": "node scripts/check-build.mjs",
     "test:client": "vitest run --coverage",
-    "test": "npm run test:client"
+    "test": "npm run build:check && npm run test:client"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "4.1.11",
     "jsdom": "28.1.0",
+    "lightningcss-cli": "1.33.0",
+    "terser": "5.50.0",
     "vitest": "4.1.11"
   }
 }
