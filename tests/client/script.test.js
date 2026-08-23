@@ -144,6 +144,20 @@ describe("URLs, identity and lobby", () => {
     expect(app.elements.lobbyMessage.innerHTML).toContain("click to copy");
   });
 
+  test("preload tolerates decode and network failures", async () => {
+    const OriginalImage = globalThis.Image;
+    globalThis.Image = class {
+      set src(value) { this._src = value; }
+      decode() { return Promise.reject(new Error("decode failed")); }
+    };
+    globalThis.fetch.mockResolvedValueOnce({ json: async () => ["/broken.png"] });
+    await expect(app.preloadCardImages()).resolves.toEqual([undefined]);
+
+    globalThis.fetch.mockRejectedValueOnce(new Error("offline"));
+    await expect(app.preloadCardImages()).resolves.toBeUndefined();
+    globalThis.Image = OriginalImage;
+  });
+
   test("initializes and replaces a lobby socket", () => {
     const previous = new FakeWebSocket("old");
     app.setState({ ws: previous });
@@ -172,19 +186,29 @@ describe("messages and game UI", () => {
     expect(app.elements.errorMessage.innerHTML).toBe("Error");
   });
 
-  test("starts a token-authenticated game and configures the UI", () => {
+  test("starts a token-authenticated game after card assets are ready", async () => {
     document.body.insertAdjacentHTML(
       "beforeend",
       '<div id="me"><div class="opponentScores"></div><div class="opponent_hand"></div></div>'
     );
     const lobbySocket = new FakeWebSocket("lobby");
-    app.setState({ ws: lobbySocket, isHost: true, userId: "me", sessionToken: "a b" });
+    let finishPreload;
+    const assetsReady = new Promise(resolve => { finishPreload = resolve; });
+    app.setState({
+      ws: lobbySocket,
+      isHost: true,
+      userId: "me",
+      sessionToken: "a b",
+      cardImagesReady: assetsReady
+    });
     app.startGame();
     expect(lobbySocket.sent[0]).toEqual({ type: "sg" });
     const gameSocket = FakeWebSocket.instances.at(-1);
     expect(gameSocket.url).not.toContain("token=");
-    gameSocket.onopen();
-    expect(gameSocket.sent[0]).toEqual({ type: "auth", token: "a b" });
+    const opening = gameSocket.onopen();
+    expect(gameSocket.sent).toEqual([{ type: "auth", token: "a b" }]);
+    finishPreload();
+    await opening;
     expect(gameSocket.sent[1]).toEqual({ type: "gs" });
     expect(app.elements.currentCards.style.display).toBe("flex");
     document.getElementById("me").remove();
@@ -535,10 +559,18 @@ describe("messages, rules, scores and loading", () => {
     app.startNewGame();
     expect(socket.sent[0]).toEqual({ type: "rg" });
     app.startLoadingAnimation();
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(50);
     expect(document.getElementById("overlay").style.display).toBe("flex");
     app.finishLoadingAnimation();
     expect(document.getElementById("overlay").style.display).toBe("none");
+  });
+
+  test("loader reports a real connection timeout", async () => {
+    vi.useFakeTimers();
+    app.startLoadingAnimation();
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(document.getElementById("overlay").style.display).toBe("none");
+    expect(app.elements.errorMessage.innerHTML).toBe("Connection timed out. Please try again.");
   });
 
   test("repairs an incomplete player list from authoritative game data", () => {

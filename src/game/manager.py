@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import WebSocket
 
 from src.connection.manager import ConnectionManager
@@ -33,6 +35,15 @@ class GameManager:
                 if player.user_id == player_id:
                     return game
         return None
+
+    async def abort_startup(self, game: Game, websocket: WebSocket) -> None:
+        game.is_active = False
+        await self.connection_manager.send_message(
+            websocket,
+            {"type": EventType.SHOW_ERROR.value, "msg": "Game startup timed out. Please try again."},
+        )
+        await self.connection_manager.disconnect(websocket)
+        self.remove_game(game.game_id)
 
     async def send_whose_turn(self, websocket: WebSocket, message: str, user_id: str) -> None:
         await self.connection_manager.send_message(
@@ -70,3 +81,39 @@ class GameManager:
                 "players_hands": [{"player_id": p.user_id, "hand_len": len(p.hand)} for p in game.players]
             }
         )
+
+    async def send_game_data_to_all(
+        self,
+        game: Game,
+        current_player_id: str,
+        chosen_suit: dict | None = None,
+        playable_cards: bool = True,
+    ) -> None:
+        await asyncio.gather(*(
+            self.send_game_data(
+                player=player,
+                current_player=player.user_id == current_player_id,
+                game=game,
+                chosen_suit=chosen_suit,
+                playable_cards=playable_cards,
+            )
+            for player in game.players
+        ))
+
+    async def send_turn_and_game_data_to_all(self, game: Game, current_player: Player) -> None:
+        async def notify(player: Player) -> None:
+            is_current_player = player.user_id == current_player.user_id
+            message = "It's your turn!" if is_current_player else f"It's {current_player.user_name}'s turn!"
+            await self.send_whose_turn(
+                websocket=player.websocket,
+                message=message,
+                user_id=current_player.user_id,
+            )
+            await self.send_game_data(
+                player=player,
+                current_player=is_current_player,
+                game=game,
+                chosen_suit=game.chosen_suit,
+            )
+
+        await asyncio.gather(*(notify(player) for player in game.players))

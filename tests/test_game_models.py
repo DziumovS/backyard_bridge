@@ -47,6 +47,14 @@ async def test_game_connection_readiness(game):
     game.mark_client_initialized(game.players[1].user_id)
     await initialized
 
+    game.all_connected_event.clear()
+    game.all_ready_event.clear()
+    game.all_initialized_event.clear()
+    game.startup_timeout_seconds = 0
+    assert not await game.wait_until_all_ready()
+    assert not await game.wait_until_all_clients_ready()
+    assert not await game.wait_until_all_clients_initialized()
+
 
 def test_game_player_navigation_and_removal(game):
     first, second = game.players

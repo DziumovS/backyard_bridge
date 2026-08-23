@@ -1,3 +1,4 @@
+import asyncio
 from html import escape
 
 from src.game.enums import EventType
@@ -132,8 +133,9 @@ class EventHandler:
 
         for player in game.players:
             player.set_default_options(can_draw=False)
-            is_current_player = player.user_id == next_player.user_id
 
+        async def notify_game_over(player: Player) -> None:
+            is_current_player = player.user_id == next_player.user_id
             await self.gm.send_game_data(
                 player=player,
                 current_player=is_current_player,
@@ -153,6 +155,8 @@ class EventHandler:
                     "is_host": player.user_id == game.host_id,
                 }
             )
+
+        await asyncio.gather(*(notify_game_over(player) for player in game.players))
 
     async def handle_disconnect_game(self, player_id: str, error: bool = False) -> None:
         game = self.gm.get_game_by_player_id(player_id=player_id)
@@ -181,18 +185,7 @@ class EventHandler:
                 message={"type": EventType.SHOW_ERROR.value, "msg": message}
             )
 
-            for player in game.players:
-                is_current_player = player.user_id == next_player.user_id
-                message = "It's your turn!" if is_current_player else f"It's {next_player.user_name}'s turn!"
-
-                await self.gm.send_whose_turn(websocket=player.websocket, message=message, user_id=next_player.user_id)
-
-                await self.gm.send_game_data(
-                    player=player,
-                    current_player=is_current_player,
-                    game=game,
-                    chosen_suit=game.chosen_suit
-                )
+            await self.gm.send_turn_and_game_data_to_all(game=game, current_player=next_player)
 
             await self.gm.connection_manager.disconnect(websocket=left_player.websocket, error=error)
 
@@ -287,13 +280,11 @@ class EventHandler:
             await self._handle_game_over(current_player=current_player, next_player=next_player, game=game)
             return
 
-        for player in game.players:
-            await self.gm.send_game_data(
-                player=player,
-                current_player=player.user_id == current_player.user_id,
-                game=game,
-                chosen_suit=game.chosen_suit
-            )
+        await self.gm.send_game_data_to_all(
+            game=game,
+            current_player_id=current_player.user_id,
+            chosen_suit=game.chosen_suit,
+        )
 
         if current_player.options.must_skip and not current_player.options.must_draw or card.rank in ("6", "J"):
             if not game.why_end:
@@ -333,13 +324,11 @@ class EventHandler:
         if game.current_card.rank == "6":
             game.card_handler.handle_card_six(current_player=current_player)
 
-        for player in game.players:
-            await self.gm.send_game_data(
-                player=player,
-                current_player=player.user_id == current_player.user_id,
-                game=game,
-                chosen_suit=game.chosen_suit
-            )
+        await self.gm.send_game_data_to_all(
+            game=game,
+            current_player_id=current_player.user_id,
+            chosen_suit=game.chosen_suit,
+        )
 
     async def handle_skip_turn(self, game, player_id: str | None = None) -> None:
         current_player = self._current_player_for(game, player_id)
@@ -362,18 +351,7 @@ class EventHandler:
             next_player.options.must_draw = 0
             next_player.options.can_draw = False
 
-        for player in game.players:
-            is_current_player = player.user_id == next_player.user_id
-            message = "It's your turn!" if is_current_player else f"It's {next_player.user_name}'s turn!"
-
-            await self.gm.send_whose_turn(websocket=player.websocket, message=message, user_id=next_player.user_id)
-
-            await self.gm.send_game_data(
-                player=player,
-                current_player=is_current_player,
-                game=game,
-                chosen_suit=game.chosen_suit
-            )
+        await self.gm.send_turn_and_game_data_to_all(game=game, current_player=next_player)
         if game.deck.is_decks_empty():
             if not playable_cards:
                 if not game.why_end:
@@ -403,7 +381,7 @@ class EventHandler:
 
         players = game.players
 
-        for player in players:
+        async def notify_reset(player: Player) -> None:
             is_current_player = player.user_id == current_player.user_id
             message = "It's your turn!" if is_current_player else f"It's {current_player.user_name}'s turn!"
 
@@ -424,13 +402,7 @@ class EventHandler:
                 playable_cards=False
             )
 
-            if is_current_player:
-                await self.gm.connection_manager.send_message(
-                    websocket=current_player.websocket,
-                    message={
-                        "type": EventType.FIRST_TURN.value,
-                        "current_card": game.current_card.card_to_dict()
-                    }
-                )
+        await asyncio.gather(*(notify_reset(player) for player in players))
+        await self.send_first_turn(game)
 
         game.four_of_a_kind_tracker.current_rank = game.current_card.rank

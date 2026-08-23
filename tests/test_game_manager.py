@@ -37,3 +37,17 @@ async def test_game_manager_sends_turn_and_private_state(game):
     assert state["current_player"] is True
     assert state["deck_len"] == len(game.deck)
     assert state["scores_rate"] == "x1"
+
+
+@pytest.mark.anyio
+async def test_game_manager_aborts_timed_out_startup(game):
+    manager = GameManager(ConnectionManager())
+    manager.create_game(game)
+    websocket = FakeWebSocket()
+
+    await manager.abort_startup(game, websocket)
+
+    assert not game.is_active
+    assert websocket.sent == [{"type": "se", "msg": "Game startup timed out. Please try again."}]
+    assert websocket.closed
+    assert manager.get_game(game.game_id) is None

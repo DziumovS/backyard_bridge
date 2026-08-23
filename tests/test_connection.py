@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from src.connection.manager import ConnectionManager
@@ -28,10 +30,35 @@ async def test_closed_socket_does_not_break_message_or_broadcast():
         async def send_json(self, message):
             raise RuntimeError("Cannot call send once a close message has been sent")
 
+        async def close(self, code=1000):
+            raise RuntimeError("Socket is already closed")
+
     closed = ClosedWebSocket()
     active = FakeWebSocket()
 
     assert await ConnectionManager.send_message(closed, {"value": 1}) is False
+    assert await ConnectionManager.disconnect(closed) is False
     await ConnectionManager.broadcast([closed, active], {"value": 2})
 
     assert active.sent == [{"value": 2}]
+
+
+@pytest.mark.anyio
+async def test_broadcast_sends_to_clients_concurrently():
+    both_started = asyncio.Event()
+    started = 0
+
+    class WaitingWebSocket(FakeWebSocket):
+        async def send_json(self, message):
+            nonlocal started
+            started += 1
+            if started == 2:
+                both_started.set()
+            await asyncio.wait_for(both_started.wait(), timeout=0.1)
+            await super().send_json(message)
+
+    first = WaitingWebSocket()
+    second = WaitingWebSocket()
+    await ConnectionManager.broadcast([first, second], {"value": 3})
+
+    assert first.sent == second.sent == [{"value": 3}]

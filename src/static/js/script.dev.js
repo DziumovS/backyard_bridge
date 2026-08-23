@@ -9,6 +9,8 @@ let eventHandlersAdded = false;
 let game_over = false;
 let errorTimeout;
 let loadingTimeout;
+let loadingFailureTimeout;
+let cardImagesReady = Promise.resolve();
 
 
 const elements = {
@@ -104,14 +106,18 @@ function createLobby() {
 
 
 function preloadCardImages() {
-    fetch('/get_cards')
+    return fetch('/get_cards')
         .then(response => response.json())
-        .then(cardUrls => {
-            cardUrls.forEach(url => {
+        .then(cardUrls => Promise.all(
+            cardUrls.map(url => {
                 const img = new Image();
                 img.src = url;
-            });
-        })
+                return typeof img.decode === "function"
+                    ? img.decode().catch(() => undefined)
+                    : Promise.resolve();
+            })
+        ))
+        .catch(() => undefined);
 }
 
 
@@ -169,7 +175,7 @@ function initializeWebSocket(type, message) {
     ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
 
     ws.onmessage = handleWebSocketMessage;
-    preloadCardImages();
+    cardImagesReady = preloadCardImages();
 }
 
 
@@ -232,6 +238,7 @@ function handleWebSocketMessage(event) {
             break;
 
         case "se":
+            finishLoadingAnimation();
             showError(data.msg, 2);
             break;
 
@@ -297,8 +304,9 @@ function startGame() {
 
     startLoadingAnimation(1, 1.5);
 
-    ws.onopen = () => {
+    ws.onopen = async () => {
         ws.send(JSON.stringify({ type: "auth", token: sessionToken }));
+        await cardImagesReady;
         ws.send(JSON.stringify({ type: "gs" }));
     };
 
@@ -943,6 +951,10 @@ function startLoadingAnimation() {
     loadingTimeout = setTimeout(() => {
         progress.style.width = "100%";
     }, 50);
+    loadingFailureTimeout = setTimeout(() => {
+        finishLoadingAnimation();
+        showError("Connection timed out. Please try again.", 5);
+    }, 20000);
 }
 
 function finishLoadingAnimation() {
@@ -950,6 +962,7 @@ function finishLoadingAnimation() {
     const progress = document.querySelector(".progress");
 
     clearTimeout(loadingTimeout);
+    clearTimeout(loadingFailureTimeout);
     progress.style.transition = "none";
     progress.style.width = "100%";
     overlay.style.display = "none";
@@ -1020,6 +1033,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             if ("isHost" in state) isHost = state.isHost;
             if ("currentPlayer" in state) currentPlayer = state.currentPlayer;
             if ("game_over" in state) game_over = state.game_over;
+            if ("cardImagesReady" in state) cardImagesReady = state.cardImagesReady;
         }
     };
 }

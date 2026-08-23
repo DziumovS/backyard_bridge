@@ -45,7 +45,9 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
         await websocket.close(code=1008)
         return
 
-    await game.wait_until_all_ready()
+    if not await game.wait_until_all_ready():
+        await game_manager.abort_startup(game, websocket)
+        return
 
     try:
         while game.is_active:
@@ -64,12 +66,16 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
                 if message.type == EventType.GAME_STARTED.value:
                     if not game.mark_client_ready(user_id):
                         raise InvalidAction("This client is already ready.")
-                    await game.wait_until_all_clients_ready()
+                    if not await game.wait_until_all_clients_ready():
+                        await game_manager.abort_startup(game, websocket)
+                        return
                     await game_manager.event_handler.handle_game_started(
                         player_id=user_id, game=game, send_first_turn=False,
                     )
                     game.mark_client_initialized(user_id)
-                    await game.wait_until_all_clients_initialized()
+                    if not await game.wait_until_all_clients_initialized():
+                        await game_manager.abort_startup(game, websocket)
+                        return
                     if game.is_current_player(player_id=user_id):
                         await game_manager.event_handler.send_first_turn(game)
                     continue

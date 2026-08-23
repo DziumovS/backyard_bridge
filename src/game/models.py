@@ -30,6 +30,8 @@ class FourOfAKindTracker:
 
 
 class Game:
+    startup_timeout_seconds = 20
+
     def __init__(self, game_id: str, players: list[Player], host_id: str | None = None):
         self.deck = Deck()
         self.game_id = game_id
@@ -61,14 +63,21 @@ class Game:
     def __del__(self):
         print(f"Game '{self.game_id}' has been deleted.")
 
-    async def wait_until_all_ready(self) -> None:
-        await self.all_connected_event.wait()
+    async def _wait_for_startup_event(self, event: asyncio.Event) -> bool:
+        try:
+            await asyncio.wait_for(event.wait(), timeout=self.startup_timeout_seconds)
+        except TimeoutError:
+            return False
+        return True
 
-    async def wait_until_all_clients_ready(self) -> None:
-        await self.all_ready_event.wait()
+    async def wait_until_all_ready(self) -> bool:
+        return await self._wait_for_startup_event(self.all_connected_event)
 
-    async def wait_until_all_clients_initialized(self) -> None:
-        await self.all_initialized_event.wait()
+    async def wait_until_all_clients_ready(self) -> bool:
+        return await self._wait_for_startup_event(self.all_ready_event)
+
+    async def wait_until_all_clients_initialized(self) -> bool:
+        return await self._wait_for_startup_event(self.all_initialized_event)
 
     def mark_client_ready(self, player_id: str) -> bool:
         if player_id in self.ready_player_ids:

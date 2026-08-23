@@ -39,7 +39,12 @@ def test_http_endpoints():
     cards = client.get("/get_cards")
     assert cards.status_code == 200
     assert "/static/cards/closed_card.png" in cards.json()
-    assert client.get("/static/css/styles.css").status_code == 200
+    assert cards.headers["cache-control"] == "public, max-age=86400"
+    static_css = client.get("/static/css/styles.css", headers={"Accept-Encoding": "gzip"})
+    assert static_css.status_code == 200
+    assert static_css.headers["cache-control"] == "public, max-age=3600, must-revalidate"
+    assert static_css.headers["content-encoding"] == "gzip"
+    assert response.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.e2e
@@ -467,6 +472,38 @@ async def test_game_router_disconnect_paths(game, monkeypatch):
         game.players[0].user_id,
     )
     assert disconnect_game.await_count == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("timeout_stage", ["connected", "ready", "initialized"])
+async def test_game_router_aborts_each_startup_timeout(game, monkeypatch, timeout_stage):
+    game_manager.create_game(game)
+    player = game.players[0]
+    incoming = [{"type": "auth", "token": player.session_token}]
+
+    if timeout_stage == "connected":
+        monkeypatch.setattr(game, "wait_until_all_ready", AsyncMock(return_value=False))
+    else:
+        game.all_connected_event.set()
+        incoming.append({"type": "gs"})
+        monkeypatch.setattr(
+            game,
+            "wait_until_all_clients_ready",
+            AsyncMock(return_value=timeout_stage == "initialized"),
+        )
+        if timeout_stage == "initialized":
+            monkeypatch.setattr(
+                game,
+                "wait_until_all_clients_initialized",
+                AsyncMock(return_value=False),
+            )
+
+    websocket = FakeWebSocket(incoming)
+    await websocket_game(websocket, game.game_id, player.user_id)
+
+    assert websocket.sent[-1] == {"type": "se", "msg": "Game startup timed out. Please try again."}
+    assert websocket.closed
+    assert game_manager.get_game(game.game_id) is None
 
 
 @pytest.mark.anyio

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
@@ -8,9 +10,14 @@ class ConnectionManager:
         await websocket.accept()
 
     @staticmethod
-    async def disconnect(websocket: WebSocket, error: bool = False) -> None:
-        if not error:
+    async def disconnect(websocket: WebSocket, error: bool = False) -> bool:
+        if error:
+            return False
+        try:
             await websocket.close(code=1000)
+        except (RuntimeError, WebSocketDisconnect):
+            return False
+        return True
 
     @staticmethod
     async def send_message(websocket: WebSocket, message: dict) -> bool:
@@ -22,5 +29,7 @@ class ConnectionManager:
 
     @staticmethod
     async def broadcast(websockets: list[WebSocket], message: dict) -> None:
-        for ws in websockets:
-            await ConnectionManager.send_message(websocket=ws, message=message)
+        await asyncio.gather(*(
+            ConnectionManager.send_message(websocket=websocket, message=message)
+            for websocket in websockets
+        ))
