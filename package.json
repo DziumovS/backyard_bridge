@@ -1,0 +1,13 @@
+{
+  "name": "backyard-bridge-client",
+  "private": true,
+  "scripts": {
+    "test:client": "vitest run --coverage",
+    "test": "npm run test:client"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "4.1.11",
+    "jsdom": "28.1.0",
+    "vitest": "4.1.11"
+  }
+}

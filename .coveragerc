@@ -1,0 +1,13 @@
+[run]
+branch = False
+omit =
+    src/**/__init__.py
+    src/utils/*
+
+[report]
+exclude_also =
+    if TYPE_CHECKING:
+    raise NotImplementedError
+show_missing = True
+skip_covered = True
+precision = 2
