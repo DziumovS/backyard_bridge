@@ -1,4 +1,7 @@
+import secrets
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
 from fastapi.responses import JSONResponse
 
 from src.connection.manager import ConnectionManager
@@ -9,6 +12,7 @@ from src.lobby.enums import EventType
 from src.game.manager import GameManager
 from src.game.models import Game
 from src.user.models import User
+from src.protocol import lobby_message_adapter
 
 
 router = APIRouter(
@@ -25,7 +29,7 @@ game_manager = GameManager(connection_manager)
 @router.get("/check_lobby/{lobby_id}")
 async def check_lobby(lobby_id: str):
     lobby = lobby_manager.lobbies.get(lobby_id)
-    exists = lobby is not None and len(lobby.users) < 4
+    exists = lobby is not None and not lobby.in_game and len(lobby.users) < 4
     message = "The lobby doesn't exist or no slots."
     return JSONResponse(content={"exists": exists, "msg": message})
 
@@ -38,22 +42,39 @@ async def get_rules():
 @router.websocket("/ws/lobby/{user_id}")
 async def websocket_lobby(websocket: WebSocket, user_id: str):
     await connection_manager.connect(websocket=websocket)
-    user = User(user_id=user_id, websocket=websocket, user_name=user_id)
+    user = User(user_id=secrets.token_urlsafe(9), websocket=websocket, user_name=user_id)
+    await connection_manager.send_message(
+        websocket,
+        {
+            "type": EventType.SESSION.value,
+            "user_id": user.user_id,
+            "session_token": user.session_token,
+        },
+    )
 
     try:
         while True:
-            data = await websocket.receive_json()
-            if "user_name" in data and data["user_name"] != user.user_id:
-                user.user_name = data["user_name"]
+            try:
+                message = lobby_message_adapter.validate_python(await websocket.receive_json())
+            except ValidationError:
+                await connection_manager.send_message(
+                    websocket,
+                    {"type": EventType.SHOW_ERROR.value, "msg": "Invalid lobby message."},
+                )
+                continue
 
-            match data["type"]:
+            data = message.model_dump()
+            if "user_name" in data:
+                user.user_name = data["user_name"].strip()
+
+            match message.type:
                 case EventType.CREATE_LOBBY.value:
                     await lobby_manager.handlers.handle_create_lobby(user=user, websocket=websocket)
 
                 case EventType.CLOSE_LOBBY.value:
-                    lobby = lobby_manager.get_lobby_by_user_id(user_id=user_id)
+                    lobby = lobby_manager.get_lobby_by_user_id(user_id=user.user_id)
                     if lobby:
-                        await lobby_manager.handlers.handle_disconnect_lobby(user_id=user_id)
+                        await lobby_manager.handlers.handle_disconnect_lobby(user_id=user.user_id)
                     break
 
                 case EventType.JOIN_LOBBY.value:
@@ -61,16 +82,19 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                     await lobby_manager.handlers.handle_join_lobby(user=user, websocket=websocket, lobby_id=lobby_id)
 
                 case EventType.START_GAME.value:
-                    game_data = await lobby_manager.handlers.handle_start_game(user_id=user_id)
+                    game_data = await lobby_manager.handlers.handle_start_game(user_id=user.user_id)
+                    if not game_data:
+                        await connection_manager.send_message(
+                            websocket,
+                            {"type": EventType.SHOW_ERROR.value, "msg": "Only the host can start a full game."},
+                        )
+                        continue
                     game_id, players = game_data
-                    game = Game(game_id=game_id, players=players)
+                    game = Game(game_id=game_id, players=players, host_id=user.user_id)
                     game_manager.create_game(game=game)
-                    await lobby_manager.handlers.handle_disconnect_lobby(user_id=user_id)
+                    await lobby_manager.handlers.handle_disconnect_lobby(user_id=user.user_id)
                     break
 
-    except WebSocketDisconnect as err:
-        match err.code:
-            case 1001 | 1012:
-                await lobby_manager.handlers.handle_disconnect_lobby(user_id=user_id, error=True)
-            case _:
-                pass
+    except WebSocketDisconnect:
+        if lobby_manager.get_lobby_by_user_id(user.user_id):
+            await lobby_manager.handlers.handle_disconnect_lobby(user_id=user.user_id, error=True)

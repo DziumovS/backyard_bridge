@@ -61,6 +61,12 @@ class GameManager:
                 "current_card": game.current_card_to_dict(),
                 "player_options": player.options_to_dict(),
                 "scores_rate": f"x{game.deck.scores_rate}",
+                "is_host": player.user_id == game.host_id,
+                "round_over": game.round_over,
+                "players": [
+                    {"user_id": current.user_id, "user_name": current.user_name}
+                    for current in game.players
+                ],
                 "players_hands": [{"player_id": p.user_id, "hand_len": len(p.hand)} for p in game.players]
             }
         )

@@ -38,50 +38,68 @@ class LobbyHandlers:
 
     async def handle_join_lobby(self, user: User, websocket: WebSocket, lobby_id: str) -> None:
         lobby = self.lobby_manager.get_lobby(lobby_id)
-        if lobby:
-            lobby.add_user(user)
-            message = f"You have joined the lobby with ID: <b>{lobby_id}</b>"
+        if not lobby or lobby.in_game or len(lobby.users) >= 4:
             await self.connection_manager.send_message(
                 websocket=websocket,
-                message={
-                    "type": EventType.JOINED_LOBBY.value,
-                    "lobby_id": lobby_id,
-                    "users": lobby.get_users(),
-                    "msg": message}
+                message={"type": EventType.SHOW_ERROR.value, "msg": "The lobby doesn't exist or no slots."},
             )
-            await self.connection_manager.broadcast(
-                websockets=lobby.get_users_websocket(),
-                message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()}
+            return
+        if user.user_id in lobby.users:
+            await self.connection_manager.send_message(
+                websocket=websocket,
+                message={"type": EventType.SHOW_ERROR.value, "msg": "This player is already in the lobby."},
             )
-            await self.update_start_button(lobby)
+            return
+
+        lobby.add_user(user)
+        message = f"You have joined the lobby with ID: <b>{lobby_id}</b>"
+        await self.connection_manager.send_message(
+            websocket=websocket,
+            message={
+                "type": EventType.JOINED_LOBBY.value,
+                "lobby_id": lobby_id,
+                "users": lobby.get_users(),
+                "msg": message}
+        )
+        await self.connection_manager.broadcast(
+            websockets=lobby.get_users_websocket(),
+            message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()}
+        )
+        await self.update_start_button(lobby)
 
     async def handle_start_game(self, user_id: str) -> tuple[str, list[User]]:
         lobby = self.lobby_manager.get_lobby_by_user_id(user_id)
-        if lobby:
+        if lobby and lobby.is_host(user_id) and 2 <= len(lobby.users) <= 4 and not lobby.in_game:
             lobby.in_game = True
             return lobby.lobby_id, lobby.create_player_list()
 
     async def handle_disconnect_lobby(self, user_id: str, error: bool = False) -> None:
         lobby = self.lobby_manager.get_lobby_by_user_id(user_id)
         if lobby:
-            user = lobby.get_user(user_id=user_id)
-            lobby.remove_user(user_id)
-            if lobby.is_host(user_id):
-                await self.connection_manager.broadcast(
-                    websockets=lobby.get_users_websocket(),
-                    message={"type": EventType.START_GAME.value, "lobby_id": lobby.lobby_id}
-                    if lobby.in_game else {"type": EventType.LOBBY_CLOSED.value}
-                )
-                await self.connection_manager.disconnect(websocket=user.websocket, error=error)
-                for user in lobby.users.values():
-                    await self.connection_manager.disconnect(websocket=user.websocket)
+            async with lobby.disconnect_lock:
+                if self.lobby_manager.get_lobby(lobby.lobby_id) is not lobby:
+                    return
+                user = lobby.get_user(user_id=user_id)
+                if user is None:
+                    return
+                lobby.remove_user(user_id)
+                if lobby.is_host(user_id):
+                    remaining_users = list(lobby.users.values())
+                    await self.connection_manager.broadcast(
+                        websockets=[remaining.websocket for remaining in remaining_users],
+                        message={"type": EventType.START_GAME.value, "lobby_id": lobby.lobby_id}
+                        if lobby.in_game else {"type": EventType.LOBBY_CLOSED.value}
+                    )
+                    await self.connection_manager.disconnect(websocket=user.websocket, error=error)
+                    for remaining in remaining_users:
+                        await self.connection_manager.disconnect(websocket=remaining.websocket)
 
-                del self.lobby_manager.lobbies[lobby.lobby_id]
-            else:
-                await self.connection_manager.broadcast(
-                    websockets=lobby.get_users_websocket(),
-                    message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()}
-                )
-                await self.update_start_button(lobby)
+                    self.lobby_manager.lobbies.pop(lobby.lobby_id, None)
+                else:
+                    await self.connection_manager.broadcast(
+                        websockets=lobby.get_users_websocket(),
+                        message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()}
+                    )
+                    await self.update_start_button(lobby)
 
-                await self.connection_manager.disconnect(websocket=user.websocket, error=error)
+                    await self.connection_manager.disconnect(websocket=user.websocket, error=error)

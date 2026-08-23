@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import WebSocket
 
 from src.user.models import User, Player
@@ -8,6 +10,7 @@ class Lobby:
         self.lobby_id = lobby_id
         self.host = host
         self.in_game = False
+        self.disconnect_lock = asyncio.Lock()
         self.users: dict[str, User] = {host.user_id: host}
 
     def __del__(self):
@@ -33,4 +36,7 @@ class Lobby:
         return [user.websocket for user in self.users.values()]
 
     def create_player_list(self) -> list[Player]:
-        return [Player(user.user_id, user.websocket, user.user_name) for user in self.users.values()]
+        return [
+            Player(user.user_id, user.websocket, user.user_name, user.session_token)
+            for user in self.users.values()
+        ]

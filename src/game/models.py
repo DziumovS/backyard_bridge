@@ -1,5 +1,6 @@
 import random
 import asyncio
+from html import escape
 from dataclasses import dataclass
 
 from fastapi import WebSocket
@@ -29,11 +30,14 @@ class FourOfAKindTracker:
 
 
 class Game:
-    def __init__(self, game_id: str, players: list[Player]):
+    def __init__(self, game_id: str, players: list[Player], host_id: str | None = None):
         self.deck = Deck()
         self.game_id = game_id
         self.players = self.shuffle_players(players=players)
+        self.host_id = host_id or players[0].user_id
         self.is_active = True
+        self.round_over = False
+        self.bridge_pending_for = None
         self.current_player_index = 0
         self.chosen_suit = None
         self.four_of_a_kind_tracker: FourOfAKindTracker = FourOfAKindTracker()
@@ -41,6 +45,11 @@ class Game:
         self.why_end = None
         self.card_handler = CardHandler(game_instance=self)
         self.all_connected_event = asyncio.Event()
+        self.all_ready_event = asyncio.Event()
+        self.all_initialized_event = asyncio.Event()
+        self.ready_player_ids: set[str] = set()
+        self.initialized_player_ids: set[str] = set()
+        self.action_lock = asyncio.Lock()
 
         for player in self.players:
             player.websocket = None
@@ -55,24 +64,51 @@ class Game:
     async def wait_until_all_ready(self) -> None:
         await self.all_connected_event.wait()
 
+    async def wait_until_all_clients_ready(self) -> None:
+        await self.all_ready_event.wait()
+
+    async def wait_until_all_clients_initialized(self) -> None:
+        await self.all_initialized_event.wait()
+
+    def mark_client_ready(self, player_id: str) -> bool:
+        if player_id in self.ready_player_ids:
+            return False
+        self.ready_player_ids.add(player_id)
+        if len(self.ready_player_ids) == len(self.players):
+            self.all_ready_event.set()
+        return True
+
+    def mark_client_initialized(self, player_id: str) -> None:
+        self.initialized_player_ids.add(player_id)
+        if len(self.initialized_player_ids) == len(self.players):
+            self.all_initialized_event.set()
+
     def check_all_players_connected(self) -> None:
         if all(player.websocket for player in self.players):
             self.all_connected_event.set()
 
-    def add_player_websocket(self, player_id: str, websocket: WebSocket) -> None:
+    def add_player_websocket(self, player_id: str, websocket: WebSocket) -> bool:
         player = self.get_player_or_none(user_id=player_id)
-        if player:
+        if player and player.websocket is None:
             player.websocket = websocket
             self.check_all_players_connected()
+            return True
+        return False
 
     def reset_game(self) -> None:
         self.deck = Deck()
         self.is_active = True
+        self.round_over = False
+        self.bridge_pending_for = None
         self.current_player_index = 0
         self.chosen_suit = None
         self.four_of_a_kind_tracker.reset()
         self.last_cards_j = {}
         self.why_end = None
+        self.ready_player_ids.clear()
+        self.initialized_player_ids.clear()
+        self.all_ready_event.clear()
+        self.all_initialized_event.clear()
 
         self.shuffle_players(players=self.players)
 
@@ -124,7 +160,7 @@ class Game:
         players_scores, losers, winners = [], [], []
 
         for player in self.players:
-            player_info = {"player": player.user_name, "scores": player.scores}
+            player_info = {"player": escape(player.user_name), "scores": player.scores}
             players_scores.append(player_info)
             losers.append(player_info) if player.scores > 125 else winners.append(player_info)
         return players_scores, losers, winners
@@ -176,7 +212,7 @@ class Game:
 
     def get_game_over_message(self, current_player: Player) -> tuple:
         players_scores, losers, winners = self.get_players_game_results()
-        player_username = current_player.user_name
+        player_username = escape(current_player.user_name)
 
         match self.why_end:
             case "bridge":

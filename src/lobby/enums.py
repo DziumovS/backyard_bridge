@@ -1,6 +1,8 @@
 from enum import Enum
 
 class EventType(Enum):
+    SESSION = "sid"
+    SHOW_ERROR = "se"
     TOGGLE_START_BUTTON = "tsb"
     LOBBY_CREATED = "lcr"
     USERS_UPDATE = "uu"
