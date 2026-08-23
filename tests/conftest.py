@@ -6,7 +6,7 @@ import sys
 import time
 from collections.abc import Iterable
 
-import httpx
+import httpx2
 import pytest
 
 from src.deck.models import Card
@@ -74,9 +74,9 @@ def live_server():
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         try:
-            if httpx.get(base_url, timeout=0.25).status_code == 200:
+            if httpx2.get(base_url, timeout=0.25).status_code == 200:
                 break
-        except httpx.HTTPError:
+        except httpx2.HTTPError:
             time.sleep(0.05)
     else:
         process.terminate()

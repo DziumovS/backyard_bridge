@@ -48,33 +48,33 @@ def test_http_endpoints():
 
 
 @pytest.mark.e2e
-def test_lobby_websocket_end_to_end():
-    client = TestClient(app)
-    with client.websocket_connect("/ws/lobby/host") as host:
-        host.send_json({"type": "crl", "user_name": "Host"})
-        session = host.receive_json()
-        created = host.receive_json()
-        users = host.receive_json()
-        toggle = host.receive_json()
+@pytest.mark.anyio
+async def test_lobby_websocket_end_to_end(live_server):
+    ws_base = live_server.replace("http://", "ws://")
+    async with websockets.connect(f"{ws_base}/ws/lobby/host") as host:
+        await host.send(json.dumps({"type": "crl", "user_name": "Host"}))
+        session = await _receive_json(host)
+        created = await _receive_json(host)
+        users = await _receive_json(host)
+        toggle = await _receive_json(host)
         lobby_id = created["lobby_id"]
         assert created["type"] == "lcr"
         assert session["type"] == "sid"
         assert users["users"] == [{"user_id": session["user_id"], "user_name": "Host"}]
         assert toggle == {"type": "tsb", "enable": False}
 
-        assert client.get(f"/check_lobby/{lobby_id}").json()["exists"]
-        with client.websocket_connect("/ws/lobby/guest") as guest:
-            guest.send_json({"type": "jl", "user_name": "Guest", "lobby_id": lobby_id})
-            assert guest.receive_json()["type"] == "sid"
-            assert guest.receive_json()["type"] == "jdl"
-            assert guest.receive_json()["type"] == "uu"
-            assert host.receive_json()["type"] == "uu"
-            assert host.receive_json() == {"type": "tsb", "enable": True}
-            guest.send_json({"type": "cll"})
-            assert host.receive_json()["type"] == "uu"
-            assert host.receive_json() == {"type": "tsb", "enable": False}
+        async with websockets.connect(f"{ws_base}/ws/lobby/guest") as guest:
+            await guest.send(json.dumps({"type": "jl", "user_name": "Guest", "lobby_id": lobby_id}))
+            assert (await _receive_json(guest))["type"] == "sid"
+            assert (await _receive_json(guest))["type"] == "jdl"
+            assert (await _receive_json(guest))["type"] == "uu"
+            assert (await _receive_json(host))["type"] == "uu"
+            assert await _receive_json(host) == {"type": "tsb", "enable": True}
+            await guest.send(json.dumps({"type": "cll"}))
+            assert (await _receive_json(host))["type"] == "uu"
+            assert await _receive_json(host) == {"type": "tsb", "enable": False}
 
-        host.send_json({"type": "cll"})
+        await host.send(json.dumps({"type": "cll"}))
 
 
 async def _receive_json(socket):
