@@ -25,6 +25,7 @@ router = APIRouter(
 connection_manager = ConnectionManager()
 lobby_manager = LobbyManager(connection_manager)
 game_manager = GameManager(connection_manager)
+LOBBY_CAPABILITIES = ["kick_users"]
 
 
 @router.get("/check_lobby/{lobby_id}")
@@ -50,6 +51,7 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
             "type": EventType.SESSION.value,
             "user_id": user.user_id,
             "session_token": user.session_token,
+            "capabilities": LOBBY_CAPABILITIES,
         },
     )
 

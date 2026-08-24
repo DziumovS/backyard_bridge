@@ -70,6 +70,7 @@ async def test_lobby_websocket_end_to_end(live_server):
         lobby_id = created["lobby_id"]
         assert created["type"] == "lcr"
         assert session["type"] == "sid"
+        assert session["capabilities"] == ["kick_users"]
         assert users["users"] == [
             {"user_id": session["user_id"], "user_name": "Host", "is_bot": False}
         ]

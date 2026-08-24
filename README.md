@@ -102,6 +102,10 @@ npm run build
 uv run --locked --no-dev uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+Restart the ASGI process after every backend update. Static files can otherwise
+come from the new checkout while a long-running Python process still uses the
+old WebSocket protocol.
+
 Configure comma-separated browser/mobile origins when the frontend is hosted
 separately from the API:
 
