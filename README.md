@@ -54,15 +54,20 @@ The object of the game is to get rid of the cards in your hand as quickly as pos
 ---
 ## LOCAL DEVELOPMENT
 
-Requires Python 3.13+ and Node.js 22+.
+Requires [uv](https://docs.astral.sh/uv/) and Node.js 22+. Python 3.13 is
+installed automatically by `uv` when it is not already available.
 
 ```bash
-python -m venv venv
-venv/bin/python -m pip install -r requirements-dev.txt
+uv sync --locked
 npm ci
 npm run build
-venv/bin/uvicorn main:app --reload
+uv run uvicorn main:app --reload
 ```
+
+Use `uv add <package>` for application dependencies and
+`uv add --dev <package>` for development dependencies. Run `uv lock --upgrade`
+when intentionally updating the complete Python dependency tree, and commit
+both `pyproject.toml` and `uv.lock`.
 
 The editable frontend sources are `src/static/js/script.dev.js`,
 `src/static/css/styles.dev.css`, and `src/templates/index.dev.html`. Run
@@ -72,7 +77,7 @@ production assets are current.
 ## TESTS
 
 ```bash
-venv/bin/python -m pytest
+uv run pytest
 npm test
 ```
 
@@ -82,11 +87,14 @@ count (2, 3, and 4). Both server and client coverage thresholds are at least
 
 ## DEPLOYMENT
 
-Install `requirements.txt`, build the frontend with `npm ci && npm run build`,
-and start the ASGI application:
+Install the locked production dependencies, build the frontend, and start the
+ASGI application:
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+uv sync --locked --no-dev
+npm ci
+npm run build
+uv run --locked --no-dev uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 Configure comma-separated browser/mobile origins when the frontend is hosted
