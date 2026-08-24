@@ -258,7 +258,9 @@ button:active {
 .buttonContainer, .gameOverButtons {
     display: flex;
     justify-content: space-around;
+    gap: 12px;
     width: 100%;
+    max-width: 430px;
     margin-top: 10px;
 }
 
@@ -266,7 +268,7 @@ button:active {
     margin-bottom: 10px;
 }
 
-#startButton:disabled, #joinLobbyButton:disabled, #changeName:disabled {
+#startButton:disabled, #addBotButton:disabled, #joinLobbyButton:disabled, #changeName:disabled {
     pointer-events: none;
     opacity: 0.5;
     cursor: not-allowed;
@@ -654,6 +656,18 @@ footer p {
 
     .betweenCurrentCards {
         gap: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .buttonContainer {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .buttonContainer button {
+        width: min(180px, 70vw);
     }
 }
 

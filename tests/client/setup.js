@@ -5,7 +5,7 @@ document.body.innerHTML = `
   <div id="nameAndScores"><span id="ws-id"></span><form id="nameForm"></form></div>
   <span id="pS"></span><input id="nameInput"><button id="changeName"></button>
   <button id="createLobbyButton"></button><input id="lobbyInput"><button id="joinLobbyButton"></button>
-  <button id="startButton"></button><button id="leaveButton"></button>
+  <button id="startButton"></button><button id="addBotButton"></button><button id="leaveButton"></button>
   <div id="errorMessage"></div><div id="lobbyControls"></div><div id="lobbyMessage"></div>
   <div id="usersHeader"></div><div id="usersList"></div><div id="currentCards"></div>
   <div id="playerHand"></div><div id="turnText"></div><div id="cardsLeft"></div>

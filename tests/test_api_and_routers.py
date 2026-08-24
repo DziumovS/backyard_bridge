@@ -12,6 +12,7 @@ from src.game.models import Game
 from src.game.errors import InvalidAction
 from src.game.router import websocket_game
 from src.lobby.router import game_manager, lobby_manager, websocket_lobby
+from src.lobby.errors import LobbyActionError
 from src.user.models import Player
 from tests.conftest import FakeWebSocket
 
@@ -30,6 +31,7 @@ def test_http_endpoints():
     response = client.get("/")
     assert response.status_code == 200
     assert "Backyard Bridge" in response.text
+    assert "Add Bot" in response.text
     assert "script.js" in response.text
     assert "user-scalable=no" not in response.text
     assert 'aria-live="polite"' in response.text
@@ -68,7 +70,9 @@ async def test_lobby_websocket_end_to_end(live_server):
         lobby_id = created["lobby_id"]
         assert created["type"] == "lcr"
         assert session["type"] == "sid"
-        assert users["users"] == [{"user_id": session["user_id"], "user_name": "Host"}]
+        assert users["users"] == [
+            {"user_id": session["user_id"], "user_name": "Host", "is_bot": False}
+        ]
         assert toggle == {"type": "tsb", "enable": False}
 
         async with websockets.connect(f"{ws_base}/ws/lobby/guest") as guest:
@@ -117,6 +121,61 @@ async def _create_started_lobby(ws_base, player_count):
         assert (await _receive_json(host)) == {"type": "tsb", "enable": True}
 
     return game_id, sessions, lobby_sockets
+
+
+@pytest.mark.e2e
+@pytest.mark.anyio
+@pytest.mark.parametrize("player_count", [2, 3, 4])
+async def test_host_can_play_with_bots_at_every_supported_player_count(live_server, player_count):
+    ws_base = live_server.replace("http://", "ws://")
+    lobby_socket = await websockets.connect(f"{ws_base}/ws/lobby/bot-host")
+    game_socket = None
+    try:
+        await lobby_socket.send(json.dumps({"type": "crl", "user_name": "Host"}))
+        session = await _receive_json(lobby_socket)
+        created = await _receive_json(lobby_socket)
+        game_id = created["lobby_id"]
+        await _receive_json(lobby_socket)
+        await _receive_json(lobby_socket)
+
+        latest_users = []
+        for expected_size in range(2, player_count + 1):
+            await lobby_socket.send('{"type":"ab"}')
+            update = await _receive_json(lobby_socket)
+            toggle = await _receive_json(lobby_socket)
+            assert update["type"] == "uu"
+            assert toggle == {"type": "tsb", "enable": True}
+            assert len(update["users"]) == expected_size
+            latest_users = update["users"]
+
+        assert sum(user["is_bot"] for user in latest_users) == player_count - 1
+        assert all(user["user_name"].endswith(" Bot") for user in latest_users if user["is_bot"])
+
+        if player_count == 4:
+            await lobby_socket.send('{"type":"ab"}')
+            assert await _receive_json(lobby_socket) == {"type": "se", "msg": "The lobby is full."}
+
+        await lobby_socket.send('{"type":"sg"}')
+        game_socket = await websockets.connect(
+            f"{ws_base}/ws/game/{game_id}/{session['user_id']}"
+        )
+        await game_socket.send(json.dumps({"type": "auth", "token": session["session_token"]}))
+        await game_socket.send('{"type":"gs"}')
+
+        human_state = None
+        for _ in range(200):
+            message = await _receive_json(game_socket)
+            if message["type"] == "gd":
+                assert len(message["players"]) == player_count
+                if message["current_player"]:
+                    human_state = message
+                    break
+        assert human_state is not None
+        assert len(human_state["hand"]) >= 5
+    finally:
+        if game_socket is not None:
+            await game_socket.close()
+        await lobby_socket.close()
 
 
 async def _connect_game_clients(ws_base, game_id, sessions):
@@ -365,11 +424,13 @@ async def test_lobby_router_dispatches_all_events(monkeypatch):
         [
             {"type": "crl", "user_name": "Name"},
             {"type": "jl", "user_name": "Name", "lobby_id": "abcdef"},
+            {"type": "ab"},
             {"type": "sg"},
         ]
     )
     create = AsyncMock()
     join = AsyncMock()
+    add_bot = AsyncMock()
     start = AsyncMock(
         return_value=(
             "game",
@@ -379,6 +440,7 @@ async def test_lobby_router_dispatches_all_events(monkeypatch):
     disconnect = AsyncMock()
     monkeypatch.setattr(lobby_manager.handlers, "handle_create_lobby", create)
     monkeypatch.setattr(lobby_manager.handlers, "handle_join_lobby", join)
+    monkeypatch.setattr(lobby_manager.handlers, "handle_add_bot", add_bot)
     monkeypatch.setattr(lobby_manager.handlers, "handle_start_game", start)
     monkeypatch.setattr(lobby_manager.handlers, "handle_disconnect_lobby", disconnect)
 
@@ -386,6 +448,7 @@ async def test_lobby_router_dispatches_all_events(monkeypatch):
 
     create.assert_awaited_once()
     join.assert_awaited_once()
+    add_bot.assert_awaited_once()
     assert start.await_count == 1
     assert disconnect.await_count == 1
     assert game_manager.get_game("game") is not None
@@ -520,15 +583,22 @@ async def test_lobby_router_reports_protocol_and_start_errors(monkeypatch):
     ws = FakeWebSocket(
         [
             {"type": "invalid"},
+            {"type": "ab"},
             {"type": "sg"},
             WebSocketDisconnect(1000),
         ]
+    )
+    monkeypatch.setattr(
+        lobby_manager.handlers,
+        "handle_add_bot",
+        AsyncMock(side_effect=LobbyActionError("Only the host can add a bot.")),
     )
     monkeypatch.setattr(lobby_manager.handlers, "handle_start_game", AsyncMock(return_value=None))
     await websocket_lobby(ws, "untrusted-path-id")
     errors = [message for message in ws.sent if message["type"] == "se"]
     assert [message["msg"] for message in errors] == [
         "Invalid lobby message.",
+        "Only the host can add a bot.",
         "Only the host can start a full game.",
     ]
 

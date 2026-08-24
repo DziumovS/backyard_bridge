@@ -59,6 +59,7 @@ def live_server():
 
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    environment["BACKYARD_BRIDGE_BOT_ACTION_DELAY"] = "0"
     server_code = (
         "import random, uvicorn; "
         "random.seed(20260823); "

@@ -99,8 +99,25 @@ describe("URLs, identity and lobby", () => {
     app.setLobbyUI(true);
     expect(app.getState().isHost).toBe(true);
     expect(app.elements.startButton.style.display).toBe("block");
+    expect(app.elements.addBotButton.style.display).toBe("block");
     app.setLobbyUI(false);
     expect(app.elements.startButton.style.display).toBe("none");
+    expect(app.elements.addBotButton.style.display).toBe("none");
+  });
+
+  test("adds bots only for an enabled host control", () => {
+    const socket = new FakeWebSocket("lobby");
+    app.setState({ ws: socket, isHost: true });
+    app.toggleAddBotButton(true);
+    app.addBot();
+    expect(socket.sent).toEqual([{ type: "ab" }]);
+
+    app.toggleAddBotButton(false);
+    app.addBot();
+    app.setState({ isHost: false });
+    app.toggleAddBotButton(true);
+    app.addBot();
+    expect(socket.sent).toHaveLength(1);
   });
 
   test("creates, joins and rejects a missing lobby", async () => {
@@ -230,6 +247,7 @@ describe("messages and game UI", () => {
   });
 
   test("renders users, opponent hands and scores", () => {
+    app.setState({ isHost: true });
     app.updateUsers(
       [
         { user_id: "me", user_name: "Me" },
@@ -238,6 +256,30 @@ describe("messages and game UI", () => {
       true
     );
     expect(app.elements.usersList.children).toHaveLength(2);
+    expect(app.elements.startButton.disabled).toBe(false);
+    expect(app.elements.addBotButton.disabled).toBe(false);
+
+    app.updateUsers(
+      Array.from({ length: 4 }, (_, index) => ({
+        user_id: `player-${index}`,
+        user_name: index ? `Player ${index}` : "Alex Bot",
+        is_bot: index === 0
+      })),
+      undefined
+    );
+    expect(app.elements.addBotButton.disabled).toBe(true);
+
+    app.updateUsers([{ user_id: "me", user_name: "Me", is_bot: false }], true);
+    expect(app.elements.startButton.disabled).toBe(true);
+    expect(app.elements.addBotButton.disabled).toBe(false);
+
+    app.updateUsers(
+      [
+        { user_id: "me", user_name: "Me" },
+        { user_id: "other", user_name: "Other" }
+      ],
+      true
+    );
     app.updateOpponentData([
       { player_id: "me", hand_len: 2 },
       { player_id: "other", hand_len: 8 }

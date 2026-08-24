@@ -12,6 +12,10 @@ origin to `BACKYARD_BRIDGE_ALLOWED_ORIGINS`.
 ### NUMBER OF PLAYERS
 `2 - 4`
 
+The lobby host can fill open seats with server-controlled bots. Bots use
+American first names followed by `Bot`, follow the same authoritative rules as
+human players, and choose moves aimed at emptying their hand.
+
 ### MAIN RULES:
 1) `Players are dealt` 5 cards each; the first player automatically plays a random card from his hand.  
 2) `The game starts` with each player having 0 points. The number of points can range from negative infinity to more than 125.  
@@ -102,6 +106,13 @@ separately from the API:
 
 ```bash
 BACKYARD_BRIDGE_ALLOWED_ORIGINS=https://game.example,capacitor://localhost
+```
+
+Bot actions use a short delay so their moves remain readable in the UI. It can
+be configured in seconds when needed:
+
+```bash
+BACKYARD_BRIDGE_BOT_ACTION_DELAY=0.45
 ```
 
 `GET /health` is available for platform health checks. WebSocket connections

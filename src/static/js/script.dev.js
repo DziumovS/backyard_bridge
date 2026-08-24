@@ -23,6 +23,7 @@ const elements = {
     joinLobbyInput: document.getElementById("lobbyInput"),
     joinLobbyButton: document.getElementById("joinLobbyButton"),
     startButton: document.getElementById("startButton"),
+    addBotButton: document.getElementById("addBotButton"),
     leaveLobbyButton: document.getElementById("leaveButton"),
     errorMessage: document.getElementById("errorMessage"),
     lobbyControls: document.getElementById("lobbyControls"),
@@ -68,6 +69,7 @@ elements.rulesButton.addEventListener("click", showRulesWidget);
 elements.joinLobbyButton.addEventListener("click", joinLobby);
 elements.createLobbyButton.addEventListener("click", createLobby);
 elements.startButton.addEventListener("click", startGame);
+elements.addBotButton.addEventListener("click", addBot);
 elements.leaveLobbyButton.addEventListener("click", leaveLobby);
 elements.continueGameButton.addEventListener("click", startNewGame);
 elements.leaveGameButton.addEventListener("click", leaveGameFromWidget);
@@ -113,6 +115,8 @@ function setLobbyUI(isHostView) {
     elements.lobbyControls.style.display = "block";
     elements.leaveLobbyButton.style.display = "inline";
     elements.startButton.style.display = isHostView ? "block" : "none";
+    elements.addBotButton.style.display = isHostView ? "block" : "none";
+    elements.addBotButton.disabled = false;
     isHost = isHostView;
 }
 
@@ -121,6 +125,13 @@ function createLobby() {
     startLoadingAnimation(0.3, 0.8);
     setLobbyUI(true);
     initializeWebSocket("crl", { user_name: userName });
+}
+
+
+function addBot() {
+    if (isHost && !elements.addBotButton.disabled) {
+        ws.send(JSON.stringify({ type: "ab" }));
+    }
 }
 
 
@@ -404,6 +415,7 @@ function returnToMainPage() {
     elements.joinLobbyButton.style.display = "inline";
     elements.joinLobbyButton.disabled = true;
     elements.leaveLobbyButton.style.display = "none";
+    elements.addBotButton.style.display = "none";
     elements.errorMessage.style.display = "none";
     elements.currentCards.style.display = "none";
     elements.usersHeader.style.display = "none";
@@ -411,7 +423,7 @@ function returnToMainPage() {
 }
 
 
-function updateUsers(users, isHost) {
+function updateUsers(users, isHostView) {
     elements.usersList.style.display = "flex";
     elements.usersList.innerHTML ="";
     elements.usersHeader.style.display = "block";
@@ -452,7 +464,10 @@ function updateUsers(users, isHost) {
 
     });
 
-    if (isHost) toggleStartButton(true);
+    if (isHost || isHostView === true) {
+        toggleStartButton(users.length >= 2 && users.length <= 4);
+        toggleAddBotButton(users.length < 4);
+    }
 }
 
 
@@ -495,6 +510,11 @@ function updateOpponentData(playersHands) {
 
 function toggleStartButton(enable) {
     elements.startButton.disabled = !enable;
+}
+
+
+function toggleAddBotButton(enable) {
+    elements.addBotButton.disabled = !enable;
 }
 
 
@@ -1030,6 +1050,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         updateUsername,
         setLobbyUI,
         createLobby,
+        addBot,
         preloadCardImages,
         joinLobby,
         setAndCopyLobbyId,
@@ -1045,6 +1066,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         updateUsers,
         updateOpponentData,
         toggleStartButton,
+        toggleAddBotButton,
         updatePlayerHand,
         whoseTurn,
         change_player,
