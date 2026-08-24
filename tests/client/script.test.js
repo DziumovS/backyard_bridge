@@ -120,6 +120,45 @@ describe("URLs, identity and lobby", () => {
     expect(socket.sent).toHaveLength(1);
   });
 
+  test("renders kick controls only for the host and sends the target id", () => {
+    const socket = new FakeWebSocket("lobby");
+    app.setState({ ws: socket, isHost: true, userId: "me" });
+    app.updateUsers(
+      [
+        { user_id: "me", user_name: "Me", is_bot: false },
+        { user_id: "bot-1", user_name: "Alex Bot", is_bot: true }
+      ],
+      true
+    );
+
+    const kickButtons = app.elements.usersList.querySelectorAll(".kick-player-button");
+    expect(kickButtons).toHaveLength(1);
+    expect(kickButtons[0].getAttribute("aria-label")).toBe("Remove Alex Bot from lobby");
+    kickButtons[0].click();
+    expect(socket.sent).toEqual([{ type: "ku", user_id: "bot-1" }]);
+
+    app.kickUser("me");
+    app.setState({ isHost: false });
+    app.kickUser("bot-1");
+    app.updateUsers([{ user_id: "other", user_name: "Other" }], false);
+    expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(0);
+    expect(socket.sent).toHaveLength(1);
+  });
+
+  test("removes lobby controls from the game player list", () => {
+    app.setState({ isHost: true, userId: "me" });
+    app.updateUsers(
+      [
+        { user_id: "me", user_name: "Me" },
+        { user_id: "other", user_name: "Other" }
+      ],
+      true
+    );
+    expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(1);
+    app.setGameUI();
+    expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(0);
+  });
+
   test("creates, joins and rejects a missing lobby", async () => {
     vi.useFakeTimers();
     globalThis.fetch.mockResolvedValue({ json: async () => [] });
@@ -202,6 +241,16 @@ describe("messages and game UI", () => {
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "lg", player_id: "missing" }) });
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "se", msg: "Error" }) });
     expect(app.elements.errorMessage.innerHTML).toBe("Error");
+  });
+
+  test("returns a kicked player to the main page with an explanation", () => {
+    app.setLobbyUI(false);
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "kfl", msg: "The host removed you from the lobby." })
+    });
+    expect(app.elements.createLobbyButton.style.display).toBe("inline");
+    expect(app.elements.errorMessage.innerHTML).toBe("The host removed you from the lobby.");
+    expect(app.getState().isHost).toBe(false);
   });
 
   test("starts a token-authenticated game after card assets are ready", async () => {

@@ -97,6 +97,39 @@ p#scores {
     font-size: 16px;
 }
 
+.player-entry {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+}
+
+.player-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+}
+
+.kick-player-button {
+    width: 28px;
+    height: 28px;
+    margin-left: 8px;
+    padding: 0;
+    border-width: 2px;
+    border-radius: 50%;
+    color: #7d1f1f;
+    font-family: Arial, sans-serif;
+    font-size: 22px;
+    line-height: 22px;
+    box-shadow: 1px 1px 3px 1px rgb(108 108 108 / 70%);
+}
+
+.kick-player-button:hover,
+.kick-player-button:focus-visible {
+    color: #b00020;
+    box-shadow: 0 0 7px 3px rgba(255, 165, 0, 0.7);
+}
+
 .opponentScores {
     display: none;
 }

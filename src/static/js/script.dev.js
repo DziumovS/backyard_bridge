@@ -241,6 +241,11 @@ function handleWebSocketMessage(event) {
             returnToMainPage();
             break;
 
+        case "kfl":
+            returnToMainPage();
+            showError(data.msg, 3);
+            break;
+
         case "tsb":
             toggleStartButton(data.enable);
             break;
@@ -360,6 +365,7 @@ function setGameUI() {
     elements.usersHeader.style.fontSize = "12px";
     elements.usersList.style.fontSize = "12px";
     elements.usersList.style.flexDirection = "row";
+    document.querySelectorAll(".kick-player-button").forEach(button => button.remove());
 
     const currentPlayerContainer = document.getElementById(userId);
     currentPlayerContainer.style.display = "none";
@@ -420,6 +426,7 @@ function returnToMainPage() {
     elements.currentCards.style.display = "none";
     elements.usersHeader.style.display = "none";
     elements.usersList.style.display = "none";
+    isHost = false;
 }
 
 
@@ -427,15 +434,33 @@ function updateUsers(users, isHostView) {
     elements.usersList.style.display = "flex";
     elements.usersList.innerHTML ="";
     elements.usersHeader.style.display = "block";
+    const canManageLobby = isHost || isHostView === true;
 
     users.forEach(user => {
         const opponentContainer = document.createElement("div");
         opponentContainer.className = user.user_id;
+        opponentContainer.classList.add("player-entry");
         opponentContainer.id = user.user_id;
+
+        const playerNameRow = document.createElement("div");
+        playerNameRow.className = "player-name-row";
 
         const userElement = document.createElement("p");
         userElement.textContent = user.user_name;
-        opponentContainer.appendChild(userElement);
+        playerNameRow.appendChild(userElement);
+
+        if (canManageLobby && user.user_id !== userId) {
+            const kickButton = document.createElement("button");
+            kickButton.type = "button";
+            kickButton.className = "kick-player-button";
+            kickButton.textContent = "×";
+            kickButton.title = `Remove ${user.user_name}`;
+            kickButton.setAttribute("aria-label", `Remove ${user.user_name} from lobby`);
+            kickButton.addEventListener("click", () => kickUser(user.user_id));
+            playerNameRow.appendChild(kickButton);
+        }
+
+        opponentContainer.appendChild(playerNameRow);
         elements.usersList.appendChild(opponentContainer);
 
         const opponentHand = document.createElement("div");
@@ -467,6 +492,13 @@ function updateUsers(users, isHostView) {
     if (isHost || isHostView === true) {
         toggleStartButton(users.length >= 2 && users.length <= 4);
         toggleAddBotButton(users.length < 4);
+    }
+}
+
+
+function kickUser(targetId) {
+    if (isHost && targetId !== userId) {
+        ws.send(JSON.stringify({ type: "ku", user_id: targetId }));
     }
 }
 
@@ -1064,6 +1096,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         leaveLobby,
         returnToMainPage,
         updateUsers,
+        kickUser,
         updateOpponentData,
         toggleStartButton,
         toggleAddBotButton,

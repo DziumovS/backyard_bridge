@@ -14,7 +14,8 @@ origin to `BACKYARD_BRIDGE_ALLOWED_ORIGINS`.
 
 The lobby host can fill open seats with server-controlled bots. Bots use
 American first names followed by `Bot`, follow the same authoritative rules as
-human players, and choose moves aimed at emptying their hand.
+human players, and choose moves aimed at emptying their hand. Before the game
+starts, the host can remove either human guests or bots from the lobby.
 
 ### MAIN RULES:
 1) `Players are dealt` 5 cards each; the first player automatically plays a random card from his hand.  
