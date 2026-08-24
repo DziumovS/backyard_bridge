@@ -85,6 +85,37 @@ class LobbyHandlers:
         )
         await self.update_start_button(lobby)
 
+    async def handle_kick_user(self, host_id: str, target_id: str) -> None:
+        lobby = self.lobby_manager.get_lobby_by_user_id(host_id)
+        if not lobby or not lobby.is_host(host_id):
+            raise LobbyActionError("Only the host can remove players.")
+        if lobby.in_game:
+            raise LobbyActionError("Players cannot be removed after the game starts.")
+        if target_id == host_id:
+            raise LobbyActionError("The host cannot remove themselves.")
+
+        async with lobby.disconnect_lock:
+            target = lobby.get_user(target_id)
+            if target is None:
+                raise LobbyActionError("This player is no longer in the lobby.")
+
+            self.lobby_manager.remove_user(lobby, target_id)
+            if target.websocket is not None:
+                await self.connection_manager.send_message(
+                    target.websocket,
+                    {
+                        "type": EventType.KICKED_FROM_LOBBY.value,
+                        "msg": "The host removed you from the lobby.",
+                    },
+                )
+                await self.connection_manager.disconnect(target.websocket)
+
+            await self.connection_manager.broadcast(
+                websockets=lobby.get_users_websocket(),
+                message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()},
+            )
+            await self.update_start_button(lobby)
+
     async def handle_start_game(self, user_id: str) -> tuple[str, list[User]]:
         lobby = self.lobby_manager.get_lobby_by_user_id(user_id)
         if lobby and lobby.is_host(user_id) and 2 <= len(lobby.users) <= 4 and not lobby.in_game:

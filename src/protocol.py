@@ -39,8 +39,18 @@ class AddBotMessage(Message):
     type: Literal["ab"]
 
 
+class KickUserMessage(Message):
+    type: Literal["ku"]
+    user_id: str = Field(min_length=1, max_length=64)
+
+
 LobbyMessage = Annotated[
-    CreateLobbyMessage | JoinLobbyMessage | CloseLobbyMessage | StartGameMessage | AddBotMessage,
+    CreateLobbyMessage
+    | JoinLobbyMessage
+    | CloseLobbyMessage
+    | StartGameMessage
+    | AddBotMessage
+    | KickUserMessage,
     Field(discriminator="type"),
 ]
 lobby_message_adapter = TypeAdapter(LobbyMessage)

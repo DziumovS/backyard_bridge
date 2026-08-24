@@ -89,6 +89,62 @@ async def test_lobby_websocket_end_to_end(live_server):
         await host.send(json.dumps({"type": "cll"}))
 
 
+@pytest.mark.e2e
+@pytest.mark.anyio
+async def test_host_kicks_human_and_bot_from_lobby(live_server):
+    ws_base = live_server.replace("http://", "ws://")
+    host = await websockets.connect(f"{ws_base}/ws/lobby/kick-host")
+    guest = None
+    try:
+        await host.send(json.dumps({"type": "crl", "user_name": "Host"}))
+        host_session = await _receive_json(host)
+        created = await _receive_json(host)
+        lobby_id = created["lobby_id"]
+        await _receive_json(host)
+        await _receive_json(host)
+
+        await host.send('{"type":"ab"}')
+        bot_update = await _receive_json(host)
+        await _receive_json(host)
+        bot_id = next(user["user_id"] for user in bot_update["users"] if user["is_bot"])
+
+        guest = await websockets.connect(f"{ws_base}/ws/lobby/kick-guest")
+        await guest.send(json.dumps({
+            "type": "jl", "user_name": "Guest", "lobby_id": lobby_id,
+        }))
+        guest_session = await _receive_json(guest)
+        await _receive_json(guest)
+        await _receive_json(guest)
+        await _receive_json(host)
+        await _receive_json(host)
+
+        await guest.send(json.dumps({"type": "ku", "user_id": bot_id}))
+        assert await _receive_json(guest) == {
+            "type": "se", "msg": "Only the host can remove players.",
+        }
+
+        await host.send(json.dumps({"type": "ku", "user_id": bot_id}))
+        assert len((await _receive_json(host))["users"]) == 2
+        assert await _receive_json(host) == {"type": "tsb", "enable": True}
+        assert len((await _receive_json(guest))["users"]) == 2
+
+        await host.send(json.dumps({"type": "ku", "user_id": guest_session["user_id"]}))
+        assert await _receive_json(guest) == {
+            "type": "kfl", "msg": "The host removed you from the lobby.",
+        }
+        assert len((await _receive_json(host))["users"]) == 1
+        assert await _receive_json(host) == {"type": "tsb", "enable": False}
+
+        await host.send(json.dumps({"type": "ku", "user_id": host_session["user_id"]}))
+        assert await _receive_json(host) == {
+            "type": "se", "msg": "The host cannot remove themselves.",
+        }
+    finally:
+        if guest is not None:
+            await guest.close()
+        await host.close()
+
+
 async def _receive_json(socket):
     return json.loads(await asyncio.wait_for(socket.recv(), timeout=3))
 
@@ -425,12 +481,14 @@ async def test_lobby_router_dispatches_all_events(monkeypatch):
             {"type": "crl", "user_name": "Name"},
             {"type": "jl", "user_name": "Name", "lobby_id": "abcdef"},
             {"type": "ab"},
+            {"type": "ku", "user_id": "other"},
             {"type": "sg"},
         ]
     )
     create = AsyncMock()
     join = AsyncMock()
     add_bot = AsyncMock()
+    kick_user = AsyncMock()
     start = AsyncMock(
         return_value=(
             "game",
@@ -441,6 +499,7 @@ async def test_lobby_router_dispatches_all_events(monkeypatch):
     monkeypatch.setattr(lobby_manager.handlers, "handle_create_lobby", create)
     monkeypatch.setattr(lobby_manager.handlers, "handle_join_lobby", join)
     monkeypatch.setattr(lobby_manager.handlers, "handle_add_bot", add_bot)
+    monkeypatch.setattr(lobby_manager.handlers, "handle_kick_user", kick_user)
     monkeypatch.setattr(lobby_manager.handlers, "handle_start_game", start)
     monkeypatch.setattr(lobby_manager.handlers, "handle_disconnect_lobby", disconnect)
 
@@ -449,6 +508,7 @@ async def test_lobby_router_dispatches_all_events(monkeypatch):
     create.assert_awaited_once()
     join.assert_awaited_once()
     add_bot.assert_awaited_once()
+    kick_user.assert_awaited_once()
     assert start.await_count == 1
     assert disconnect.await_count == 1
     assert game_manager.get_game("game") is not None
@@ -584,6 +644,7 @@ async def test_lobby_router_reports_protocol_and_start_errors(monkeypatch):
         [
             {"type": "invalid"},
             {"type": "ab"},
+            {"type": "ku", "user_id": "other"},
             {"type": "sg"},
             WebSocketDisconnect(1000),
         ]
@@ -593,12 +654,18 @@ async def test_lobby_router_reports_protocol_and_start_errors(monkeypatch):
         "handle_add_bot",
         AsyncMock(side_effect=LobbyActionError("Only the host can add a bot.")),
     )
+    monkeypatch.setattr(
+        lobby_manager.handlers,
+        "handle_kick_user",
+        AsyncMock(side_effect=LobbyActionError("Only the host can remove players.")),
+    )
     monkeypatch.setattr(lobby_manager.handlers, "handle_start_game", AsyncMock(return_value=None))
     await websocket_lobby(ws, "untrusted-path-id")
     errors = [message for message in ws.sent if message["type"] == "se"]
     assert [message["msg"] for message in errors] == [
         "Invalid lobby message.",
         "Only the host can add a bot.",
+        "Only the host can remove players.",
         "Only the host can start a full game.",
     ]
 

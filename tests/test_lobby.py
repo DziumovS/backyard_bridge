@@ -187,3 +187,46 @@ async def test_host_adds_bots_until_lobby_is_full(users):
     lobby.remove_user(bots[-1].user_id)
     with pytest.raises(LobbyActionError, match="full"):
         await manager.handlers.handle_add_bot(users[0].user_id)
+
+
+@pytest.mark.anyio
+async def test_only_host_can_kick_humans_and_bots(users):
+    manager = LobbyManager(ConnectionManager())
+    host, guest = users[:2]
+    lobby = Lobby("lobby", host)
+    manager.add_lobby(lobby)
+    manager.add_user(lobby, guest)
+    bot = BotUser("bot", "Alex Bot")
+    manager.add_user(lobby, bot)
+
+    with pytest.raises(LobbyActionError, match="Only the host"):
+        await manager.handlers.handle_kick_user(guest.user_id, bot.user_id)
+    with pytest.raises(LobbyActionError, match="cannot remove themselves"):
+        await manager.handlers.handle_kick_user(host.user_id, host.user_id)
+    with pytest.raises(LobbyActionError, match="no longer"):
+        await manager.handlers.handle_kick_user(host.user_id, "missing")
+
+    await manager.handlers.handle_kick_user(host.user_id, bot.user_id)
+    assert lobby.get_user(bot.user_id) is None
+    assert manager.get_lobby_by_user_id(bot.user_id) is None
+
+    guest.websocket.sent.clear()
+    await manager.handlers.handle_kick_user(host.user_id, guest.user_id)
+    assert guest.websocket.sent == [
+        {"type": "kfl", "msg": "The host removed you from the lobby."}
+    ]
+    assert guest.websocket.closed
+    assert lobby.get_user(guest.user_id) is None
+    assert host.websocket.sent[-1] == {"type": "tsb", "enable": False}
+
+
+@pytest.mark.anyio
+async def test_kick_is_rejected_after_game_starts(users):
+    manager = LobbyManager(ConnectionManager())
+    lobby = Lobby("lobby", users[0])
+    manager.add_lobby(lobby)
+    manager.add_user(lobby, users[1])
+    lobby.in_game = True
+
+    with pytest.raises(LobbyActionError, match="after the game starts"):
+        await manager.handlers.handle_kick_user(users[0].user_id, users[1].user_id)

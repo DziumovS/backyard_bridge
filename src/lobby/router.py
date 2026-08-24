@@ -91,6 +91,18 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                             {"type": EventType.SHOW_ERROR.value, "msg": str(error)},
                         )
 
+                case EventType.KICK_USER.value:
+                    try:
+                        await lobby_manager.handlers.handle_kick_user(
+                            host_id=user.user_id,
+                            target_id=data["user_id"],
+                        )
+                    except LobbyActionError as error:
+                        await connection_manager.send_message(
+                            websocket,
+                            {"type": EventType.SHOW_ERROR.value, "msg": str(error)},
+                        )
+
                 case EventType.START_GAME.value:
                     game_data = await lobby_manager.handlers.handle_start_game(user_id=user.user_id)
                     if not game_data:

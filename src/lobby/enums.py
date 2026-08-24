@@ -13,3 +13,5 @@ class EventType(Enum):
     CLOSE_LOBBY = "cll"
     JOIN_LOBBY = "jl"
     ADD_BOT = "ab"
+    KICK_USER = "ku"
+    KICKED_FROM_LOBBY = "kfl"

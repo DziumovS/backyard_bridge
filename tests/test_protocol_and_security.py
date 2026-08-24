@@ -44,6 +44,10 @@ def test_protocol_strips_names_and_validates_cards():
     message = lobby_message_adapter.validate_python({"type": "crl", "user_name": "  Name  "})
     assert message.user_name == "Name"
     assert lobby_message_adapter.validate_python({"type": "ab"}).type == "ab"
+    kick = lobby_message_adapter.validate_python({"type": "ku", "user_id": "player-1"})
+    assert kick.user_id == "player-1"
+    with pytest.raises(ValidationError):
+        lobby_message_adapter.validate_python({"type": "ku", "user_id": ""})
     valid = game_message_adapter.validate_python(
         {"type": "pc", "card": {"rank": "J", "suit": "♥"}, "chosen_suit": "♣"}
     )
