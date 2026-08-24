@@ -4,6 +4,7 @@ from src.connection.manager import ConnectionManager
 from src.lobby.models import Lobby
 from src.lobby.handlers import LobbyHandlers
 from src.user.models import User
+from src.bot.factory import BotFactory
 
 
 class LobbyManager:
@@ -11,6 +12,7 @@ class LobbyManager:
         self.connection_manager = manager
         self.lobbies: dict[str, Lobby] = {}
         self._lobby_ids_by_user: dict[str, str] = {}
+        self.bot_factory = BotFactory()
         self.handlers = LobbyHandlers(self)
 
     def generate_lobby_id(self) -> str:

@@ -104,13 +104,21 @@ class EventHandler:
 
     async def _broadcast_play_animation(self, game, current_player: Player, card: Card) -> None:
         await self.gm.connection_manager.broadcast(
-            websockets=[player.websocket for player in game.players if player.user_id != current_player.user_id],
+            websockets=[
+                player.websocket
+                for player in game.players
+                if player.user_id != current_player.user_id and player.websocket is not None
+            ],
             message={"type": EventType.ANIMATE_PLAYED_CARD.value, "card": card.card_to_dict()},
         )
 
     async def _broadcast_draw_animation(self, game, current_player: Player) -> None:
         await self.gm.connection_manager.broadcast(
-            websockets=[player.websocket for player in game.players if player.user_id != current_player.user_id],
+            websockets=[
+                player.websocket
+                for player in game.players
+                if player.user_id != current_player.user_id and player.websocket is not None
+            ],
             message={"type": EventType.ANIMATE_DRAW_CARD.value, "current_player": current_player.user_id},
         )
 
@@ -156,7 +164,7 @@ class EventHandler:
                 }
             )
 
-        await asyncio.gather(*(notify_game_over(player) for player in game.players))
+        await asyncio.gather(*(notify_game_over(player) for player in game.players if player.websocket is not None))
 
     async def handle_disconnect_game(self, player_id: str, error: bool = False) -> None:
         game = self.gm.get_game_by_player_id(player_id=player_id)
@@ -201,7 +209,8 @@ class EventHandler:
 
             await self.gm.connection_manager.disconnect(websocket=left_player.websocket, error=error)
 
-            if len(game.players) <= 1:
+            human_players = [player for player in game.players if not player.is_bot]
+            if len(game.players) <= 1 or not human_players:
                 game.is_active = False
                 message = (f"<b>{safe_name}</b> has left the game, not enough players to continue the game."
                            f" Returning to the home page...")
@@ -210,10 +219,12 @@ class EventHandler:
                     websockets=game.get_players_websocket(),
                     message={"type": EventType.NOT_ENOUGH_PLAYERS.value, "msg": message})
 
-                for player in game.players:
+                for player in human_players:
                     await self.gm.connection_manager.disconnect(websocket=player.websocket)
 
                 self.gm.remove_game(game.game_id)
+            else:
+                await self.gm.run_bot_turns(game)
 
     async def handle_game_started(self, player_id: str, game, send_first_turn: bool = True) -> None:
         player = game.get_player_or_none(user_id=player_id)
@@ -231,6 +242,8 @@ class EventHandler:
 
     async def send_first_turn(self, game) -> None:
         current_player = game.get_current_player()
+        if current_player.websocket is None:
+            return
         await self.gm.connection_manager.send_message(
             websocket=current_player.websocket,
             message={
@@ -303,14 +316,15 @@ class EventHandler:
                 if game.is_it_bridge(card=card):
                     game.bridge_pending_for = current_player.user_id
                     message = "You have played the 4-th card in a row of the same value. Would you say bridge?"
-                    await self.gm.connection_manager.send_message(
-                        websocket=current_player.websocket,
-                        message={
-                            "type": EventType.IS_IT_BRIDGE.value,
-                            "msg": message,
-                            "current_card": played_card
-                        }
-                    )
+                    if current_player.websocket is not None:
+                        await self.gm.connection_manager.send_message(
+                            websocket=current_player.websocket,
+                            message={
+                                "type": EventType.IS_IT_BRIDGE.value,
+                                "msg": message,
+                                "current_card": played_card
+                            }
+                        )
 
     async def handle_drew_card(self, game, player_id: str | None = None) -> None:
         current_player = self._current_player_for(game, player_id)
@@ -417,7 +431,7 @@ class EventHandler:
                 playable_cards=False
             )
 
-        await asyncio.gather(*(notify_reset(player) for player in players))
+        await asyncio.gather(*(notify_reset(player) for player in players if player.websocket is not None))
         await self.send_first_turn(game)
 
         game.four_of_a_kind_tracker.current_rank = game.current_card.rank

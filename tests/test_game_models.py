@@ -63,7 +63,7 @@ def test_game_player_navigation_and_removal(game):
     assert game.is_current_player(first.user_id)
     assert game.get_current_player() is first
     assert game.get_next_player() is second
-    assert game.get_players_websocket() == [first.websocket, second.websocket]
+    assert game.get_players_websocket() == []
     game.next_player()
     assert game.get_current_player() is second
     game.remove_player(first)

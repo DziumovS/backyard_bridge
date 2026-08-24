@@ -35,8 +35,12 @@ class StartGameMessage(Message):
     type: Literal["sg"]
 
 
+class AddBotMessage(Message):
+    type: Literal["ab"]
+
+
 LobbyMessage = Annotated[
-    CreateLobbyMessage | JoinLobbyMessage | CloseLobbyMessage | StartGameMessage,
+    CreateLobbyMessage | JoinLobbyMessage | CloseLobbyMessage | StartGameMessage | AddBotMessage,
     Field(discriminator="type"),
 ]
 lobby_message_adapter = TypeAdapter(LobbyMessage)

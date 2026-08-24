@@ -7,6 +7,7 @@ from src.game.enums import EventType
 from src.user.models import Player
 from src.game.models import Game
 from src.game.handlers import EventHandler
+from src.bot.controller import BotController
 
 
 class GameManager:
@@ -15,6 +16,7 @@ class GameManager:
         self.games: dict[str, Game] = {}
         self._game_ids_by_player: dict[str, str] = {}
         self.event_handler = EventHandler(game_manager_instance=self)
+        self.bot_controller = BotController(self)
 
     def create_game(self, game: Game) -> None:
         self.games[game.game_id] = game
@@ -72,6 +74,8 @@ class GameManager:
         self.remove_game(game.game_id)
 
     async def send_whose_turn(self, websocket: WebSocket, message: str, user_id: str) -> None:
+        if websocket is None:
+            return
         await self.connection_manager.send_message(
             websocket=websocket,
             message={
@@ -91,6 +95,9 @@ class GameManager:
         scores_rate_changed: bool = False,
     ) -> None:
 
+        if player.websocket is None:
+            return
+
         cards = player.prepare_playable_cards(game=game, chosen_suit=chosen_suit, playable_cards=playable_cards)
 
         await self.connection_manager.send_message(
@@ -109,7 +116,11 @@ class GameManager:
                 "is_host": player.user_id == game.host_id,
                 "round_over": game.round_over,
                 "players": [
-                    {"user_id": current.user_id, "user_name": current.user_name}
+                    {
+                        "user_id": current.user_id,
+                        "user_name": current.user_name,
+                        "is_bot": current.is_bot,
+                    }
                     for current in game.players
                 ],
                 "players_hands": [{"player_id": p.user_id, "hand_len": len(p.hand)} for p in game.players]
@@ -152,4 +163,7 @@ class GameManager:
                 chosen_suit=game.chosen_suit,
             )
 
-        await asyncio.gather(*(notify(player) for player in game.players))
+        await asyncio.gather(*(notify(player) for player in game.players if player.websocket is not None))
+
+    async def run_bot_turns(self, game: Game) -> None:
+        await self.bot_controller.run_until_human_turn(game)

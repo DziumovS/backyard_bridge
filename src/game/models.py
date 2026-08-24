@@ -49,8 +49,9 @@ class Game:
         self.all_connected_event = asyncio.Event()
         self.all_ready_event = asyncio.Event()
         self.all_initialized_event = asyncio.Event()
-        self.ready_player_ids: set[str] = set()
-        self.initialized_player_ids: set[str] = set()
+        bot_ids = {player.user_id for player in self.players if player.is_bot}
+        self.ready_player_ids: set[str] = set(bot_ids)
+        self.initialized_player_ids: set[str] = set(bot_ids)
         self.action_lock = asyncio.Lock()
 
         for player in self.players:
@@ -59,6 +60,7 @@ class Game:
                 player.draw_card(self.deck)
 
         self.current_card = self.card_distribution()
+        self.check_all_players_connected()
 
     async def _wait_for_startup_event(self, event: asyncio.Event) -> bool:
         try:
@@ -84,13 +86,17 @@ class Game:
             self.all_ready_event.set()
         return True
 
-    def mark_client_initialized(self, player_id: str) -> None:
+    def mark_client_initialized(self, player_id: str) -> bool:
+        if player_id in self.initialized_player_ids:
+            return False
         self.initialized_player_ids.add(player_id)
         if len(self.initialized_player_ids) == len(self.players):
             self.all_initialized_event.set()
+            return True
+        return False
 
     def check_all_players_connected(self) -> None:
-        if all(player.websocket for player in self.players):
+        if all(player.is_bot or player.websocket for player in self.players):
             self.all_connected_event.set()
 
     def add_player_websocket(self, player_id: str, websocket: WebSocket) -> bool:
@@ -207,7 +213,7 @@ class Game:
         return self.players[(self.current_player_index + 1) % len(self.players)]
 
     def get_players_websocket(self) -> list[WebSocket]:
-        return [player.websocket for player in self.players]
+        return [player.websocket for player in self.players if player.websocket is not None]
 
     def next_player(self) -> None:
         self.current_player_index = (self.current_player_index + 1) % len(self.players)

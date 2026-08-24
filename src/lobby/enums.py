@@ -12,3 +12,4 @@ class EventType(Enum):
     CREATE_LOBBY = "crl"
     CLOSE_LOBBY = "cll"
     JOIN_LOBBY = "jl"
+    ADD_BOT = "ab"

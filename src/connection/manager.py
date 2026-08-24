@@ -10,8 +10,8 @@ class ConnectionManager:
         await websocket.accept()
 
     @staticmethod
-    async def disconnect(websocket: WebSocket, error: bool = False) -> bool:
-        if error:
+    async def disconnect(websocket: WebSocket | None, error: bool = False) -> bool:
+        if error or websocket is None:
             return False
         try:
             await websocket.close(code=1000)
@@ -20,7 +20,9 @@ class ConnectionManager:
         return True
 
     @staticmethod
-    async def send_message(websocket: WebSocket, message: dict) -> bool:
+    async def send_message(websocket: WebSocket | None, message: dict) -> bool:
+        if websocket is None:
+            return False
         try:
             await websocket.send_json(message)
         except (RuntimeError, WebSocketDisconnect):

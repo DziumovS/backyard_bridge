@@ -6,6 +6,9 @@ from src.lobby.handlers import LobbyHandlers
 from src.lobby.manager import LobbyManager
 from src.lobby.models import Lobby
 from src.user.models import Player, User
+from src.bot.factory import BotFactory
+from src.bot.models import BotPlayer, BotUser
+from src.lobby.errors import LobbyActionError
 from tests.conftest import FakeWebSocket
 
 
@@ -17,8 +20,8 @@ def test_lobby_model(users):
     assert lobby.get_user(users[1].user_id) is users[1]
     assert lobby.get_user("missing") is None
     assert lobby.get_users() == [
-        {"user_id": "1", "user_name": "Player 1"},
-        {"user_id": "2", "user_name": "Player 2"},
+        {"user_id": "1", "user_name": "Player 1", "is_bot": False},
+        {"user_id": "2", "user_name": "Player 2", "is_bot": False},
     ]
     assert lobby.get_users_websocket() == [users[0].websocket, users[1].websocket]
     players = lobby.create_player_list()
@@ -92,6 +95,20 @@ async def test_host_disconnect_broadcasts_start(users):
 
 
 @pytest.mark.anyio
+async def test_host_can_start_and_close_lobby_with_server_only_bots(users):
+    manager = LobbyManager(ConnectionManager())
+    lobby = Lobby("lobby", users[0])
+    lobby.add_user(BotUser("bot", "Alex Bot"))
+    lobby.in_game = True
+    manager.add_lobby(lobby)
+
+    await manager.handlers.handle_disconnect_lobby(users[0].user_id)
+
+    assert manager.get_lobby("lobby") is None
+    assert users[0].websocket.closed
+
+
+@pytest.mark.anyio
 async def test_concurrent_lobby_disconnects_are_serialized(users):
     class SlowConnectionManager(ConnectionManager):
         @staticmethod
@@ -138,3 +155,35 @@ async def test_duplicate_concurrent_guest_disconnect_is_safe(users):
 async def test_disconnect_unknown_user_is_noop():
     handlers = LobbyHandlers(LobbyManager(ConnectionManager()))
     await handlers.handle_disconnect_lobby("missing")
+
+
+@pytest.mark.anyio
+async def test_host_adds_bots_until_lobby_is_full(users):
+    manager = LobbyManager(ConnectionManager())
+    manager.bot_factory = BotFactory(
+        names=("Alex", "Taylor", "Jordan"),
+        chooser=lambda names: names[0],
+    )
+    lobby = Lobby("lobby", users[0])
+    manager.add_lobby(lobby)
+
+    with pytest.raises(LobbyActionError, match="Only the host"):
+        await manager.handlers.handle_add_bot(users[1].user_id)
+
+    for expected_size in (2, 3, 4):
+        await manager.handlers.handle_add_bot(users[0].user_id)
+        assert len(lobby.users) == expected_size
+
+    bots = [user for user in lobby.users.values() if user.is_bot]
+    assert [bot.user_name for bot in bots] == ["Alex Bot", "Taylor Bot", "Jordan Bot"]
+    assert all(bot.websocket is None for bot in bots)
+    assert all(isinstance(player, BotPlayer) for player in lobby.create_player_list()[1:])
+    assert len(lobby.get_users_websocket()) == 1
+
+    with pytest.raises(LobbyActionError, match="full"):
+        await manager.handlers.handle_add_bot(users[0].user_id)
+
+    lobby.in_game = True
+    lobby.remove_user(bots[-1].user_id)
+    with pytest.raises(LobbyActionError, match="full"):
+        await manager.handlers.handle_add_bot(users[0].user_id)

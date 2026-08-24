@@ -43,6 +43,7 @@ def test_lobby_protocol_rejects_invalid_messages(payload):
 def test_protocol_strips_names_and_validates_cards():
     message = lobby_message_adapter.validate_python({"type": "crl", "user_name": "  Name  "})
     assert message.user_name == "Name"
+    assert lobby_message_adapter.validate_python({"type": "ab"}).type == "ab"
     valid = game_message_adapter.validate_python(
         {"type": "pc", "card": {"rank": "J", "suit": "♥"}, "chosen_suit": "♣"}
     )

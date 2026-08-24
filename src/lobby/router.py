@@ -9,6 +9,7 @@ from src.connection.manager import ConnectionManager
 from src.lobby.rules_txt import rules
 from src.lobby.manager import LobbyManager
 from src.lobby.enums import EventType
+from src.lobby.errors import LobbyActionError
 from src.game.manager import GameManager
 from src.game.models import Game
 from src.user.models import User
@@ -80,6 +81,15 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                 case EventType.JOIN_LOBBY.value:
                     lobby_id = data.get("lobby_id")
                     await lobby_manager.handlers.handle_join_lobby(user=user, websocket=websocket, lobby_id=lobby_id)
+
+                case EventType.ADD_BOT.value:
+                    try:
+                        await lobby_manager.handlers.handle_add_bot(user_id=user.user_id)
+                    except LobbyActionError as error:
+                        await connection_manager.send_message(
+                            websocket,
+                            {"type": EventType.SHOW_ERROR.value, "msg": str(error)},
+                        )
 
                 case EventType.START_GAME.value:
                     game_data = await lobby_manager.handlers.handle_start_game(user_id=user.user_id)

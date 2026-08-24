@@ -3,6 +3,7 @@ from fastapi import WebSocket
 from src.user.models import User
 from src.lobby.enums import EventType
 from src.lobby.models import Lobby
+from src.lobby.errors import LobbyActionError
 
 
 
@@ -67,6 +68,23 @@ class LobbyHandlers:
         )
         await self.update_start_button(lobby)
 
+    async def handle_add_bot(self, user_id: str) -> None:
+        lobby = self.lobby_manager.get_lobby_by_user_id(user_id)
+        if not lobby or not lobby.is_host(user_id):
+            raise LobbyActionError("Only the host can add a bot.")
+        if lobby.in_game or len(lobby.users) >= 4:
+            raise LobbyActionError("The lobby is full.")
+
+        bot = self.lobby_manager.bot_factory.create(
+            existing_names={user.user_name for user in lobby.users.values()},
+        )
+        self.lobby_manager.add_user(lobby, bot)
+        await self.connection_manager.broadcast(
+            websockets=lobby.get_users_websocket(),
+            message={"type": EventType.USERS_UPDATE.value, "users": lobby.get_users()},
+        )
+        await self.update_start_button(lobby)
+
     async def handle_start_game(self, user_id: str) -> tuple[str, list[User]]:
         lobby = self.lobby_manager.get_lobby_by_user_id(user_id)
         if lobby and lobby.is_host(user_id) and 2 <= len(lobby.users) <= 4 and not lobby.in_game:
@@ -86,13 +104,18 @@ class LobbyHandlers:
                 if lobby.is_host(user_id):
                     remaining_users = list(lobby.users.values())
                     await self.connection_manager.broadcast(
-                        websockets=[remaining.websocket for remaining in remaining_users],
+                        websockets=[
+                            remaining.websocket
+                            for remaining in remaining_users
+                            if remaining.websocket is not None
+                        ],
                         message={"type": EventType.START_GAME.value, "lobby_id": lobby.lobby_id}
                         if lobby.in_game else {"type": EventType.LOBBY_CLOSED.value}
                     )
                     await self.connection_manager.disconnect(websocket=user.websocket, error=error)
                     for remaining in remaining_users:
-                        await self.connection_manager.disconnect(websocket=remaining.websocket)
+                        if remaining.websocket is not None:
+                            await self.connection_manager.disconnect(websocket=remaining.websocket)
 
                     self.lobby_manager.remove_lobby(lobby.lobby_id)
                 else:

@@ -30,6 +30,13 @@ async def test_game_started_for_current_and_other_player(game):
 
 
 @pytest.mark.anyio
+async def test_first_turn_ignores_server_only_player(game):
+    _, handler = setup_manager(game)
+    game.get_current_player().websocket = None
+    await handler.send_first_turn(game)
+
+
+@pytest.mark.anyio
 async def test_play_normal_card_broadcasts_state(game):
     _, handler = setup_manager(game)
     current = game.get_current_player()

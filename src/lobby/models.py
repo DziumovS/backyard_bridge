@@ -3,6 +3,7 @@ import asyncio
 from fastapi import WebSocket
 
 from src.user.models import User, Player
+from src.bot.models import BotPlayer, BotUser
 
 
 class Lobby:
@@ -27,13 +28,18 @@ class Lobby:
             del self.users[user_id]
 
     def get_users(self) -> list[dict]:
-        return [{"user_id": user.user_id, "user_name": user.user_name} for user in self.users.values()]
+        return [
+            {"user_id": user.user_id, "user_name": user.user_name, "is_bot": user.is_bot}
+            for user in self.users.values()
+        ]
 
     def get_users_websocket(self) -> list[WebSocket]:
-        return [user.websocket for user in self.users.values()]
+        return [user.websocket for user in self.users.values() if user.websocket is not None]
 
     def create_player_list(self) -> list[Player]:
         return [
-            Player(user.user_id, user.websocket, user.user_name, user.session_token)
+            BotPlayer.from_user(user)
+            if isinstance(user, BotUser)
+            else Player(user.user_id, user.websocket, user.user_name, user.session_token)
             for user in self.users.values()
         ]

@@ -38,6 +38,8 @@ async def test_closed_socket_does_not_break_message_or_broadcast():
 
     assert await ConnectionManager.send_message(closed, {"value": 1}) is False
     assert await ConnectionManager.disconnect(closed) is False
+    assert await ConnectionManager.send_message(None, {"value": 1}) is False
+    assert await ConnectionManager.disconnect(None) is False
     await ConnectionManager.broadcast([closed, active], {"value": 2})
 
     assert active.sent == [{"value": 2}]

@@ -7,7 +7,9 @@ from src.deck.models import Deck, Card
 
 
 class User:
-    def __init__(self, user_id: str, websocket: WebSocket, user_name: str, session_token: str | None = None):
+    is_bot = False
+
+    def __init__(self, user_id: str, websocket: WebSocket | None, user_name: str, session_token: str | None = None):
         self.user_id: str = user_id
         self.websocket: WebSocket = websocket
         self.user_name: str = user_name
@@ -23,7 +25,7 @@ class PlayerOptions:
 
 
 class Player(User):
-    def __init__(self, user_id: str, websocket: WebSocket, user_name: str, session_token: str | None = None):
+    def __init__(self, user_id: str, websocket: WebSocket | None, user_name: str, session_token: str | None = None):
         super().__init__(user_id, websocket, user_name, session_token)
         self.hand: list = []
         self.scores: int = 0
