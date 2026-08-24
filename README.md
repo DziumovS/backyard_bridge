@@ -54,7 +54,7 @@ The object of the game is to get rid of the cards in your hand as quickly as pos
 ---
 ## LOCAL DEVELOPMENT
 
-Requires [uv](https://docs.astral.sh/uv/) and Node.js 22+. Python 3.13 is
+Requires [uv](https://docs.astral.sh/uv/) and Node.js 22+. Python 3.14 is
 installed automatically by `uv` when it is not already available.
 
 ```bash
