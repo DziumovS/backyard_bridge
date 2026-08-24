@@ -89,6 +89,10 @@ p#scores {
     display: none;
 }
 
+.usersHeader.lobby-users-header {
+    height: 140px;
+}
+
 .usersContainer {
     display: flex;
     justify-content: space-evenly;
@@ -107,21 +111,32 @@ p#scores {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 30px;
+    min-height: 27px;
+    padding: 1px 7px;
+    border: 1px solid rgb(216 219 226 / 12%);
+    border-radius: 12px;
+    background-color: rgb(0 0 0 / 18%);
+    box-sizing: border-box;
+    line-height: 20px;
+    white-space: nowrap;
+}
+
+.player-name-row p {
+    line-height: 20px;
 }
 
 .kick-player-button {
-    width: 28px;
-    height: 28px;
-    margin-left: 8px;
+    width: 20px;
+    height: 20px;
+    margin-left: 6px;
     padding: 0;
-    border-width: 2px;
+    border-width: 1px;
     border-radius: 50%;
     color: #7d1f1f;
     font-family: Arial, sans-serif;
-    font-size: 22px;
-    line-height: 22px;
-    box-shadow: 1px 1px 3px 1px rgb(108 108 108 / 70%);
+    font-size: 17px;
+    line-height: 17px;
+    box-shadow: 1px 1px 2px 1px rgb(108 108 108 / 55%);
 }
 
 .kick-player-button:hover,
@@ -175,7 +190,7 @@ input {
 }
 
 input[type="text"]:focus,
-button:focus {
+button:focus-visible {
     outline: 3px solid #ffa500;
     outline-offset: 2px;
 }

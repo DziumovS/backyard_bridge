@@ -60,7 +60,8 @@ beforeEach(() => {
     sessionToken: "secret",
     isHost: false,
     currentPlayer: "other",
-    game_over: false
+    game_over: false,
+    lobbyCapabilities: ["kick_users"]
   });
   app.elements.errorMessage.innerHTML = "";
   app.elements.playerHand.innerHTML = "";
@@ -98,6 +99,7 @@ describe("URLs, identity and lobby", () => {
 
     app.setLobbyUI(true);
     expect(app.getState().isHost).toBe(true);
+    expect(app.elements.usersHeader.classList.contains("lobby-users-header")).toBe(true);
     expect(app.elements.startButton.style.display).toBe("block");
     expect(app.elements.addBotButton.style.display).toBe("block");
     app.setLobbyUI(false);
@@ -105,12 +107,23 @@ describe("URLs, identity and lobby", () => {
     expect(app.elements.addBotButton.style.display).toBe("none");
   });
 
+  test("hides kick controls when an older server does not advertise support", () => {
+    app.setState({ isHost: true, userId: "me", lobbyCapabilities: [] });
+    app.updateUsers([
+      { user_id: "me", user_name: "Me" },
+      { user_id: "other", user_name: "Other" }
+    ], true);
+    expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(0);
+  });
+
   test("adds bots only for an enabled host control", () => {
     const socket = new FakeWebSocket("lobby");
+    const blur = vi.spyOn(app.elements.addBotButton, "blur");
     app.setState({ ws: socket, isHost: true });
     app.toggleAddBotButton(true);
     app.addBot();
     expect(socket.sent).toEqual([{ type: "ab" }]);
+    expect(blur).toHaveBeenCalledOnce();
 
     app.toggleAddBotButton(false);
     app.addBot();
@@ -118,6 +131,7 @@ describe("URLs, identity and lobby", () => {
     app.toggleAddBotButton(true);
     app.addBot();
     expect(socket.sent).toHaveLength(1);
+    expect(blur).toHaveBeenCalledOnce();
   });
 
   test("renders kick controls only for the host and sends the target id", () => {
@@ -157,6 +171,7 @@ describe("URLs, identity and lobby", () => {
     expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(1);
     app.setGameUI();
     expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(0);
+    expect(app.elements.usersHeader.classList.contains("lobby-users-header")).toBe(false);
   });
 
   test("creates, joins and rejects a missing lobby", async () => {
@@ -230,8 +245,21 @@ describe("URLs, identity and lobby", () => {
 
 describe("messages and game UI", () => {
   test("handles session, lobby and simple game messages", () => {
-    app.handleWebSocketMessage({ data: JSON.stringify({ type: "sid", user_id: "server-id", session_token: "token" }) });
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "sid", user_id: "legacy-id", session_token: "legacy-token" })
+    });
+    expect(app.getState().lobbyCapabilities).toEqual([]);
+
+    app.handleWebSocketMessage({
+      data: JSON.stringify({
+        type: "sid",
+        user_id: "server-id",
+        session_token: "token",
+        capabilities: ["kick_users"]
+      })
+    });
     expect(app.getState().userId).toBe("server-id");
+    expect(app.getState().lobbyCapabilities).toEqual(["kick_users"]);
 
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "lcr", lobby_id: "abcdef", msg: "Created" }) });
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "jdl", lobby_id: "abcdef", msg: "Joined", users: [] }) });

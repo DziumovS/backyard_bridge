@@ -13,6 +13,7 @@ let loadingFailureTimeout;
 let scoresRateAnimationTimeout;
 let lastScoresRate = "x1";
 let cardImagesReady = Promise.resolve();
+let lobbyCapabilities = new Set();
 
 
 const elements = {
@@ -113,6 +114,7 @@ function setLobbyUI(isHostView) {
     elements.joinLobbyInput.style.display = "none";
     elements.joinLobbyButton.style.display = "none";
     elements.lobbyControls.style.display = "block";
+    elements.usersHeader.classList.add("lobby-users-header");
     elements.leaveLobbyButton.style.display = "inline";
     elements.startButton.style.display = isHostView ? "block" : "none";
     elements.addBotButton.style.display = isHostView ? "block" : "none";
@@ -131,6 +133,7 @@ function createLobby() {
 function addBot() {
     if (isHost && !elements.addBotButton.disabled) {
         ws.send(JSON.stringify({ type: "ab" }));
+        elements.addBotButton.blur();
     }
 }
 
@@ -216,6 +219,7 @@ function handleWebSocketMessage(event) {
         case "sid":
             userId = data.user_id;
             sessionToken = data.session_token;
+            lobbyCapabilities = new Set(data.capabilities || []);
             break;
 
         case "lcr":
@@ -363,6 +367,7 @@ function setGameUI() {
     elements.playerScores.style.display = "block";
 
     elements.usersHeader.style.fontSize = "12px";
+    elements.usersHeader.classList.remove("lobby-users-header");
     elements.usersList.style.fontSize = "12px";
     elements.usersList.style.flexDirection = "row";
     document.querySelectorAll(".kick-player-button").forEach(button => button.remove());
@@ -425,6 +430,7 @@ function returnToMainPage() {
     elements.errorMessage.style.display = "none";
     elements.currentCards.style.display = "none";
     elements.usersHeader.style.display = "none";
+    elements.usersHeader.classList.remove("lobby-users-header");
     elements.usersList.style.display = "none";
     isHost = false;
 }
@@ -434,7 +440,7 @@ function updateUsers(users, isHostView) {
     elements.usersList.style.display = "flex";
     elements.usersList.innerHTML ="";
     elements.usersHeader.style.display = "block";
-    const canManageLobby = isHost || isHostView === true;
+    const canManageLobby = (isHost || isHostView === true) && lobbyCapabilities.has("kick_users");
 
     users.forEach(user => {
         const opponentContainer = document.createElement("div");
@@ -1134,7 +1140,17 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         closeGameOverWidget,
         startLoadingAnimation,
         finishLoadingAnimation,
-        getState: () => ({ ws, lobbyId, userId, userName, sessionToken, isHost, currentPlayer, game_over }),
+        getState: () => ({
+            ws,
+            lobbyId,
+            userId,
+            userName,
+            sessionToken,
+            isHost,
+            currentPlayer,
+            game_over,
+            lobbyCapabilities: [...lobbyCapabilities],
+        }),
         setState: (state) => {
             if ("ws" in state) ws = state.ws;
             if ("lobbyId" in state) lobbyId = state.lobbyId;
@@ -1144,6 +1160,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             if ("isHost" in state) isHost = state.isHost;
             if ("currentPlayer" in state) currentPlayer = state.currentPlayer;
             if ("game_over" in state) game_over = state.game_over;
+            if ("lobbyCapabilities" in state) lobbyCapabilities = new Set(state.lobbyCapabilities);
             if ("cardImagesReady" in state) cardImagesReady = state.cardImagesReady;
         }
     };
