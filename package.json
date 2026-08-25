@@ -8,9 +8,11 @@
     "build": "npm run build:js && npm run build:css && npm run build:html",
     "build:check": "node scripts/check-build.mjs",
     "test:client": "vitest run --coverage",
-    "test": "npm run build:check && npm run test:client"
+    "test:browser": "playwright test",
+    "test": "npm run build:check && npm run test:client && npm run test:browser"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@vitest/coverage-v8": "4.1.11",
     "html-minifier-terser": "^7.2.0",
     "jsdom": "30.0.1",
