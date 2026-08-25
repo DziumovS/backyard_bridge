@@ -116,13 +116,16 @@ describe("URLs, identity and lobby", () => {
     expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(0);
   });
 
-  test("adds bots only for an enabled host control", () => {
+  test("adds bots only for an enabled host control and clears delayed touch focus", async () => {
+    vi.useFakeTimers();
     const socket = new FakeWebSocket("lobby");
     const blur = vi.spyOn(app.elements.addBotButton, "blur");
     app.setState({ ws: socket, isHost: true });
     app.toggleAddBotButton(true);
     app.addBot();
     expect(socket.sent).toEqual([{ type: "ab" }]);
+    expect(blur).not.toHaveBeenCalled();
+    await vi.runAllTimersAsync();
     expect(blur).toHaveBeenCalledOnce();
 
     app.toggleAddBotButton(false);

@@ -93,6 +93,18 @@ p#scores {
     height: 140px;
 }
 
+.usersHeader.lobby-users-header .usersContainer {
+    display: grid;
+    width: max-content;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.usersHeader.lobby-users-header .player-entry,
+.usersHeader.lobby-users-header .player-name-row {
+    width: 100%;
+}
+
 .usersContainer {
     display: flex;
     justify-content: space-evenly;
@@ -110,12 +122,12 @@ p#scores {
 .player-name-row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     min-height: 27px;
     padding: 1px 7px;
-    border: 1px solid rgb(216 219 226 / 12%);
+    border: 1px solid rgb(216 219 226 / 8%);
     border-radius: 12px;
-    background-color: rgb(0 0 0 / 18%);
+    background-color: rgb(216 219 226 / 6%);
     box-sizing: border-box;
     line-height: 20px;
     white-space: nowrap;
@@ -716,6 +728,16 @@ footer p {
 
     .buttonContainer button {
         width: min(180px, 70vw);
+    }
+}
+
+@media (hover: none) and (pointer: coarse) {
+    #addBotButton:hover,
+    #addBotButton:focus,
+    #addBotButton:focus-visible {
+        outline: none;
+        transform: none;
+        box-shadow: 2px 2px 5px 2px rgb(108 108 108 / 70%);
     }
 }
 

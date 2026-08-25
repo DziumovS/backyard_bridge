@@ -133,7 +133,7 @@ function createLobby() {
 function addBot() {
     if (isHost && !elements.addBotButton.disabled) {
         ws.send(JSON.stringify({ type: "ab" }));
-        elements.addBotButton.blur();
+        setTimeout(() => elements.addBotButton.blur(), 0);
     }
 }
 
