@@ -88,7 +88,10 @@ npm test
 
 The server suite includes real WebSocket sessions for every supported player
 count (2, 3, and 4). Both server and client coverage thresholds are at least
-99%. GitHub Actions runs both suites for pushes and pull requests.
+99%. Browser layout tests cover the responsive lobby geometry and mobile touch
+focus behavior. Install Chromium once with `npx playwright install chromium`
+before running `npm test` locally. GitHub Actions runs every suite for pushes
+and pull requests.
 
 ## DEPLOYMENT
 
