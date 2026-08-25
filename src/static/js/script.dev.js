@@ -14,6 +14,8 @@ let scoresRateAnimationTimeout;
 let lastScoresRate = "x1";
 let cardImagesReady = Promise.resolve();
 let lobbyCapabilities = new Set();
+let lobbyMaxPlayers = 4;
+let selectedLobbySize = 4;
 
 
 const elements = {
@@ -21,6 +23,16 @@ const elements = {
     pS: document.querySelector("#pS"),
     nameForm: document.getElementById("nameForm"),
     createLobbyButton: document.getElementById("createLobbyButton"),
+    createLobbyWidget: document.getElementById("create-lobby-widget"),
+    closeCreateLobbyWidget: document.getElementById("closeCreateLobbyWidget"),
+    createPublicLobbyButton: document.getElementById("createPublicLobbyButton"),
+    createPrivateLobbyButton: document.getElementById("createPrivateLobbyButton"),
+    playerCountButtons: document.querySelectorAll("[data-player-count]"),
+    publicLobbiesPanel: document.getElementById("publicLobbiesPanel"),
+    publicLobbiesList: document.getElementById("publicLobbiesList"),
+    refreshLobbiesButton: document.getElementById("refreshLobbiesButton"),
+    privateLobbyLabel: document.querySelector(".private-lobby-label"),
+    joinLobbyControls: document.querySelector(".joinLobbyControls"),
     joinLobbyInput: document.getElementById("lobbyInput"),
     joinLobbyButton: document.getElementById("joinLobbyButton"),
     startButton: document.getElementById("startButton"),
@@ -68,12 +80,27 @@ elements.nameInput.addEventListener("input", function () {
 elements.nameForm.addEventListener("submit", updateUsername);
 elements.rulesButton.addEventListener("click", showRulesWidget);
 elements.joinLobbyButton.addEventListener("click", joinLobby);
-elements.createLobbyButton.addEventListener("click", createLobby);
+elements.createLobbyButton.addEventListener("click", openCreateLobbyWidget);
+elements.closeCreateLobbyWidget.addEventListener("click", closeCreateLobbyWidget);
+elements.createPublicLobbyButton.addEventListener("click", () => createLobby(true));
+elements.createPrivateLobbyButton.addEventListener("click", () => createLobby(false));
+elements.playerCountButtons.forEach(button => {
+    button.addEventListener("click", () => selectLobbySize(Number(button.dataset.playerCount)));
+});
+elements.createLobbyWidget.addEventListener("click", event => {
+    if (event.target === elements.createLobbyWidget) closeCreateLobbyWidget();
+});
+elements.refreshLobbiesButton.addEventListener("click", refreshPublicLobbies);
 elements.startButton.addEventListener("click", startGame);
 elements.addBotButton.addEventListener("click", addBot);
 elements.leaveLobbyButton.addEventListener("click", leaveLobby);
 elements.continueGameButton.addEventListener("click", startNewGame);
 elements.leaveGameButton.addEventListener("click", leaveGameFromWidget);
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeCreateLobbyWidget();
+});
+
+void refreshPublicLobbies();
 
 
 function getWsBaseUrl(path) {
@@ -111,8 +138,9 @@ function setLobbyUI(isHostView) {
     elements.welcomeMessage.style.display = "none";
     elements.createLobbyButton.style.display = "none";
     elements.nameForm.style.display = "none";
-    elements.joinLobbyInput.style.display = "none";
-    elements.joinLobbyButton.style.display = "none";
+    elements.joinLobbyControls.style.display = "none";
+    elements.privateLobbyLabel.style.display = "none";
+    elements.publicLobbiesPanel.style.display = "none";
     elements.lobbyControls.style.display = "block";
     elements.usersHeader.classList.add("lobby-users-header");
     elements.leaveLobbyButton.style.display = "inline";
@@ -123,10 +151,36 @@ function setLobbyUI(isHostView) {
 }
 
 
-function createLobby() {
+function openCreateLobbyWidget() {
+    selectLobbySize(4);
+    elements.createLobbyWidget.style.display = "flex";
+}
+
+
+function closeCreateLobbyWidget() {
+    elements.createLobbyWidget.style.display = "none";
+}
+
+
+function selectLobbySize(size) {
+    selectedLobbySize = size;
+    elements.playerCountButtons.forEach(button => {
+        const selected = Number(button.dataset.playerCount) === size;
+        button.classList.toggle("selected", selected);
+        button.setAttribute("aria-pressed", String(selected));
+    });
+}
+
+
+function createLobby(isPublic = false) {
+    closeCreateLobbyWidget();
     startLoadingAnimation(0.3, 0.8);
     setLobbyUI(true);
-    initializeWebSocket("crl", { user_name: userName });
+    initializeWebSocket("crl", {
+        user_name: userName,
+        is_public: isPublic,
+        max_players: selectedLobbySize,
+    });
 }
 
 
@@ -158,6 +212,12 @@ async function joinLobby() {
     const inputLobbyId = elements.joinLobbyInput.value.trim();
     if (!inputLobbyId) return;
 
+    await joinLobbyById(inputLobbyId);
+}
+
+
+async function joinLobbyById(inputLobbyId) {
+
     const response = await fetch(`/check_lobby/${inputLobbyId}`);
     const data = await response.json();
 
@@ -171,29 +231,84 @@ async function joinLobby() {
 }
 
 
-function setAndCopyLobbyId(lobby_id, msg) {
-    lobbyId = lobby_id;
-    const pre_click = `<br><span class="small-text">(click to copy ID to clipboard)</span>`;
-    const post_click = `<br><span class="small-text" style="color: #ffa500" id="copyInfo">ID copied!</span>`;
-    elements.lobbyMessage.innerHTML = msg + pre_click;
+function renderLobbyDetails(data) {
+    lobbyId = data.lobby_id;
+    lobbyMaxPlayers = data.max_players || 4;
+    elements.lobbyMessage.replaceChildren();
 
-    elements.lobbyMessage.removeEventListener("click", copyToClipboard);
-    elements.lobbyMessage.addEventListener("click", copyToClipboard);
+    const name = document.createElement("p");
+    name.className = "lobby-summary-name";
+    name.textContent = data.lobby_name;
+    elements.lobbyMessage.appendChild(name);
 
-    function copyToClipboard() {
-        navigator.clipboard.writeText(lobby_id);
+    const meta = document.createElement("p");
+    meta.className = "lobby-summary-meta";
+    meta.textContent = `${data.is_public ? "Public" : "Private"} lobby · ${lobbyMaxPlayers} players`;
+    elements.lobbyMessage.appendChild(meta);
 
-        if (!document.getElementById("copyInfo")) {
-            elements.lobbyMessage.innerHTML = msg + post_click;
-        }
+    if (!data.is_public) {
+        const codeButton = document.createElement("button");
+        const lobbyCode = lobbyId;
+        codeButton.type = "button";
+        codeButton.className = "lobby-code-button";
+        codeButton.textContent = `Code: ${lobbyCode} · tap to copy`;
+        codeButton.addEventListener("click", () => {
+            navigator.clipboard.writeText(lobbyCode);
+            codeButton.textContent = `Code copied: ${lobbyCode}`;
+            setTimeout(() => {
+                codeButton.textContent = `Code: ${lobbyCode} · tap to copy`;
+            }, 2000);
+        });
+        elements.lobbyMessage.appendChild(codeButton);
+    }
+}
 
-        setTimeout(() => {
-            const copyInfo = document.getElementById("copyInfo");
-            if (copyInfo) {
-                copyInfo.remove();
-            }
-            elements.lobbyMessage.innerHTML = msg + pre_click;
-        }, 2000);
+
+function renderPublicLobbies(lobbies) {
+    elements.publicLobbiesList.replaceChildren();
+    if (!lobbies.length) {
+        const empty = document.createElement("p");
+        empty.className = "public-lobbies-empty";
+        empty.textContent = "No public lobbies are available yet.";
+        elements.publicLobbiesList.appendChild(empty);
+        return;
+    }
+
+    lobbies.forEach(lobby => {
+        const row = document.createElement("div");
+        row.className = "public-lobby-row";
+
+        const details = document.createElement("div");
+        details.className = "public-lobby-details";
+        const name = document.createElement("p");
+        name.className = "public-lobby-name";
+        name.textContent = lobby.name;
+        const capacity = document.createElement("p");
+        capacity.className = "public-lobby-capacity";
+        capacity.textContent = `${lobby.players}/${lobby.max_players} players`;
+        details.append(name, capacity);
+
+        const joinButton = document.createElement("button");
+        joinButton.type = "button";
+        joinButton.className = "public-lobby-join-button";
+        joinButton.textContent = "Join";
+        joinButton.setAttribute("aria-label", `Join ${lobby.name}`);
+        joinButton.addEventListener("click", () => joinLobbyById(lobby.lobby_id));
+        row.append(details, joinButton);
+        elements.publicLobbiesList.appendChild(row);
+    });
+}
+
+
+async function refreshPublicLobbies() {
+    elements.refreshLobbiesButton.disabled = true;
+    try {
+        const response = await fetch("/public_lobbies");
+        renderPublicLobbies(await response.json());
+    } catch {
+        renderPublicLobbies([]);
+    } finally {
+        elements.refreshLobbiesButton.disabled = false;
     }
 }
 
@@ -223,17 +338,17 @@ function handleWebSocketMessage(event) {
             break;
 
         case "lcr":
-            setAndCopyLobbyId(data.lobby_id, data.msg);
+            renderLobbyDetails(data);
             break;
 
         case "jdl":
-            setAndCopyLobbyId(data.lobby_id, data.msg);
-            updateUsers(data.users, false);
+            renderLobbyDetails(data);
+            updateUsers(data.users, false, data.max_players);
             finishLoadingAnimation();
             break;
 
         case "uu":
-            updateUsers(data.users, data.is_host);
+            updateUsers(data.users, data.is_host, data.max_players);
             finishLoadingAnimation();
             break;
 
@@ -421,7 +536,9 @@ function returnToMainPage() {
     elements.welcomeMessage.style.display = "block";
     elements.createLobbyButton.style.display = "inline";
     elements.nameForm.style.display = "none";
-    elements.joinLobbyInput.style.display = "inline";
+    elements.joinLobbyControls.style.display = "flex";
+    elements.privateLobbyLabel.style.display = "block";
+    elements.publicLobbiesPanel.style.display = "block";
     elements.joinLobbyInput.value ="";
     elements.joinLobbyButton.style.display = "inline";
     elements.joinLobbyButton.disabled = true;
@@ -433,10 +550,12 @@ function returnToMainPage() {
     elements.usersHeader.classList.remove("lobby-users-header");
     elements.usersList.style.display = "none";
     isHost = false;
+    void refreshPublicLobbies();
 }
 
 
-function updateUsers(users, isHostView) {
+function updateUsers(users, isHostView, maxPlayers = lobbyMaxPlayers) {
+    lobbyMaxPlayers = maxPlayers;
     elements.usersList.style.display = "flex";
     elements.usersList.innerHTML ="";
     elements.usersHeader.style.display = "block";
@@ -496,8 +615,8 @@ function updateUsers(users, isHostView) {
     });
 
     if (isHost || isHostView === true) {
-        toggleStartButton(users.length >= 2 && users.length <= 4);
-        toggleAddBotButton(users.length < 4);
+        toggleStartButton(users.length === lobbyMaxPlayers);
+        toggleAddBotButton(users.length < lobbyMaxPlayers);
     }
 }
 
@@ -1087,11 +1206,17 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         leaveGameFromWidget,
         updateUsername,
         setLobbyUI,
+        openCreateLobbyWidget,
+        closeCreateLobbyWidget,
+        selectLobbySize,
         createLobby,
         addBot,
         preloadCardImages,
         joinLobby,
-        setAndCopyLobbyId,
+        joinLobbyById,
+        renderLobbyDetails,
+        renderPublicLobbies,
+        refreshPublicLobbies,
         initializeWebSocket,
         handleWebSocketMessage,
         showError,
@@ -1149,6 +1274,8 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             isHost,
             currentPlayer,
             game_over,
+            lobbyMaxPlayers,
+            selectedLobbySize,
             lobbyCapabilities: [...lobbyCapabilities],
         }),
         setState: (state) => {
@@ -1160,6 +1287,8 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             if ("isHost" in state) isHost = state.isHost;
             if ("currentPlayer" in state) currentPlayer = state.currentPlayer;
             if ("game_over" in state) game_over = state.game_over;
+            if ("lobbyMaxPlayers" in state) lobbyMaxPlayers = state.lobbyMaxPlayers;
+            if ("selectedLobbySize" in state) selectedLobbySize = state.selectedLobbySize;
             if ("lobbyCapabilities" in state) lobbyCapabilities = new Set(state.lobbyCapabilities);
             if ("cardImagesReady" in state) cardImagesReady = state.cardImagesReady;
         }

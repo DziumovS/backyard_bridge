@@ -1,10 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-async function createLobby(page, botCount) {
+async function createLobby(page, botCount, { maxPlayers = 4, isPublic = false } = {}) {
   await page.goto("/");
   await page.locator("#nameInput").fill("A");
   await page.getByRole("button", { name: "Change name" }).click();
-  await page.getByRole("button", { name: "New Game" }).click();
+  await page.getByRole("button", { name: "Create Lobby", exact: true }).click();
+  await page.getByRole("button", { name: String(maxPlayers), exact: true }).click();
+  await page.getByRole("button", {
+    name: isPublic ? "Public Lobby" : "Private Lobby",
+    exact: true
+  }).click();
   await expect(page.locator(".player-name-row")).toHaveCount(1);
 
   const addBot = page.getByRole("button", { name: "Add Bot" });
@@ -67,7 +72,11 @@ test("mobile tap clears Add Bot focus and sticky highlighting", async ({ browser
   await page.goto("/");
   await page.locator("#nameInput").fill("A");
   await page.getByRole("button", { name: "Change name" }).tap();
-  await page.getByRole("button", { name: "New Game" }).tap();
+  await page.getByRole("button", { name: "Create Lobby", exact: true }).tap();
+  const dialog = page.getByRole("dialog", { name: "Create Lobby" });
+  await expect(dialog).toBeVisible();
+  await page.getByRole("button", { name: "4", exact: true }).tap();
+  await page.getByRole("button", { name: "Private Lobby", exact: true }).tap();
   await expect(page.locator(".player-name-row")).toHaveCount(1);
 
   const addBot = page.getByRole("button", { name: "Add Bot" });
@@ -90,5 +99,53 @@ test("mobile tap clears Add Bot focus and sticky highlighting", async ({ browser
   expect(state.outline).toBe("none");
   expect(state.boxShadow).not.toContain("255, 165, 0");
   expect(state.overflows).toBe(false);
+  await context.close();
+});
+
+test("public lobby is discoverable and joins at the configured capacity", async ({ browser }) => {
+  const hostContext = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const guestContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+
+  await host.goto("/");
+  await host.locator("#nameInput").fill("Alice");
+  await host.getByRole("button", { name: "Change name" }).click();
+  await host.getByRole("button", { name: "Create Lobby", exact: true }).click();
+  await host.getByRole("button", { name: "2", exact: true }).click();
+  await host.getByRole("button", { name: "Public Lobby", exact: true }).click();
+  await expect(host.locator(".lobby-summary-name")).toHaveText("Alice's lobby");
+  await expect(host.locator(".lobby-summary-meta")).toContainText("Public lobby · 2 players");
+  await expect(host.locator(".lobby-code-button")).toHaveCount(0);
+
+  await guest.goto("/");
+  await guest.getByRole("button", { name: "Refresh" }).click();
+  await expect(guest.locator(".public-lobby-row")).toContainText("Alice's lobby");
+  await expect(guest.locator(".public-lobby-row")).toContainText("1/2 players");
+  await guest.getByRole("button", { name: "Join Alice's lobby" }).click();
+
+  await expect(guest.locator(".lobby-summary-name")).toHaveText("Alice's lobby");
+  await expect(host.locator(".player-name-row")).toHaveCount(2);
+  await expect(host.getByRole("button", { name: "Start Game" })).toBeEnabled();
+  expect(await guest.evaluate(() => document.body.scrollWidth > innerWidth)).toBe(false);
+
+  await guestContext.close();
+  await hostContext.close();
+});
+
+test("private lobby exposes its code but stays out of public discovery", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.locator("#nameInput").fill("Bob");
+  await page.getByRole("button", { name: "Change name" }).click();
+  await page.getByRole("button", { name: "Create Lobby", exact: true }).click();
+  await page.getByRole("button", { name: "3", exact: true }).click();
+  await page.getByRole("button", { name: "Private Lobby", exact: true }).click();
+
+  await expect(page.locator(".lobby-summary-name")).toHaveText("Bob's lobby");
+  await expect(page.locator(".lobby-summary-meta")).toContainText("Private lobby · 3 players");
+  await expect(page.locator(".lobby-code-button")).toContainText(/Code: [0-9a-f]{6}/);
+  expect(await page.evaluate(() => document.body.scrollWidth > innerWidth)).toBe(false);
   await context.close();
 });

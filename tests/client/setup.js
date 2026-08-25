@@ -4,7 +4,15 @@ document.body.innerHTML = `
   <header><button id="rulesButton"></button></header>
   <div id="nameAndScores"><span id="ws-id"></span><form id="nameForm"></form></div>
   <span id="pS"></span><input id="nameInput"><button id="changeName"></button>
-  <button id="createLobbyButton"></button><input id="lobbyInput"><button id="joinLobbyButton"></button>
+  <button id="createLobbyButton"></button>
+  <div id="create-lobby-widget"><button id="closeCreateLobbyWidget"></button>
+    <button id="createPublicLobbyButton"></button><button id="createPrivateLobbyButton"></button>
+    <button data-player-count="2"></button><button data-player-count="3"></button>
+    <button data-player-count="4" class="selected"></button>
+  </div>
+  <div id="publicLobbiesPanel"><button id="refreshLobbiesButton"></button><div id="publicLobbiesList"></div></div>
+  <p class="private-lobby-label"></p>
+  <div class="joinLobbyControls"><input id="lobbyInput"><button id="joinLobbyButton"></button></div>
   <button id="startButton"></button><button id="addBotButton"></button><button id="leaveButton"></button>
   <div id="errorMessage"></div><div id="lobbyControls"></div><div id="lobbyMessage"></div>
   <div id="usersHeader"></div><div id="usersList"></div><div id="currentCards"></div>

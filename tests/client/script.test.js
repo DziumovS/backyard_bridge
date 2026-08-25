@@ -35,7 +35,7 @@ let app;
 beforeAll(async () => {
   globalThis.WebSocket = FakeWebSocket;
   globalThis.Image = FakeImage;
-  globalThis.fetch = vi.fn();
+  globalThis.fetch = vi.fn().mockResolvedValue({ json: async () => [] });
   HTMLElement.prototype.getBoundingClientRect = () => ({
     left: 10,
     top: 20,
@@ -61,11 +61,15 @@ beforeEach(() => {
     isHost: false,
     currentPlayer: "other",
     game_over: false,
+    lobbyMaxPlayers: 4,
+    selectedLobbySize: 4,
     lobbyCapabilities: ["kick_users"]
   });
   app.elements.errorMessage.innerHTML = "";
   app.elements.playerHand.innerHTML = "";
   app.elements.usersList.innerHTML = "";
+  app.elements.publicLobbiesList.innerHTML = "";
+  app.elements.createLobbyWidget.style.display = "none";
   app.elements.rightCard.innerHTML = '<img src="/right.png">';
   app.elements.leftCard.innerHTML = '<img src="/static/cards/closed_card.png">';
   app.resetScoresRate();
@@ -105,6 +109,37 @@ describe("URLs, identity and lobby", () => {
     app.setLobbyUI(false);
     expect(app.elements.startButton.style.display).toBe("none");
     expect(app.elements.addBotButton.style.display).toBe("none");
+  });
+
+  test("configures public and private lobbies with an exact player count", () => {
+    globalThis.fetch.mockResolvedValue({ json: async () => [] });
+    app.elements.createLobbyButton.click();
+    expect(app.elements.createLobbyWidget.style.display).toBe("flex");
+    expect(app.getState().selectedLobbySize).toBe(4);
+
+    app.elements.playerCountButtons[0].click();
+    expect(app.getState().selectedLobbySize).toBe(2);
+    expect(app.elements.playerCountButtons[0].getAttribute("aria-pressed")).toBe("true");
+    app.elements.createPublicLobbyButton.click();
+    const publicSocket = FakeWebSocket.instances.at(-1);
+    publicSocket.onopen();
+    expect(publicSocket.sent[0]).toEqual({
+      type: "crl", user_name: "Me", is_public: true, max_players: 2
+    });
+    expect(app.elements.createLobbyWidget.style.display).toBe("none");
+
+    app.setState({ ws: null });
+    app.elements.playerCountButtons[1].click();
+    app.elements.createPrivateLobbyButton.click();
+    const privateSocket = FakeWebSocket.instances.at(-1);
+    privateSocket.onopen();
+    expect(privateSocket.sent[0]).toEqual({
+      type: "crl", user_name: "Me", is_public: false, max_players: 3
+    });
+
+    app.openCreateLobbyWidget();
+    app.elements.createLobbyWidget.click();
+    expect(app.elements.createLobbyWidget.style.display).toBe("none");
   });
 
   test("hides kick controls when an older server does not advertise support", () => {
@@ -183,7 +218,9 @@ describe("URLs, identity and lobby", () => {
     app.createLobby();
     const socket = FakeWebSocket.instances[0];
     socket.onopen();
-    expect(socket.sent[0]).toEqual({ type: "crl", user_name: "Me" });
+    expect(socket.sent[0]).toEqual({
+      type: "crl", user_name: "Me", is_public: false, max_players: 4
+    });
 
     globalThis.fetch
       .mockResolvedValueOnce({ json: async () => ({ exists: true }) })
@@ -204,19 +241,66 @@ describe("URLs, identity and lobby", () => {
     await app.joinLobby();
   });
 
-  test("preloads images and copies the lobby id", async () => {
+  test("preloads images and renders safe public and private lobby details", async () => {
     globalThis.fetch.mockResolvedValue({ json: async () => ["/a.png", "/b.png"] });
     app.preloadCardImages();
     await Promise.resolve();
     await Promise.resolve();
 
     vi.useFakeTimers();
-    app.setAndCopyLobbyId("abcdef", "Lobby");
-    app.elements.lobbyMessage.click();
+    app.renderLobbyDetails({
+      lobby_id: "abcdef",
+      lobby_name: "Me's lobby",
+      is_public: false,
+      max_players: 3
+    });
+    const codeButton = app.elements.lobbyMessage.querySelector(".lobby-code-button");
+    codeButton.click();
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("abcdef");
-    app.elements.lobbyMessage.click();
+    expect(codeButton.textContent).toContain("Code copied");
     await vi.runAllTimersAsync();
-    expect(app.elements.lobbyMessage.innerHTML).toContain("click to copy");
+    expect(codeButton.textContent).toContain("tap to copy");
+    expect(app.getState().lobbyMaxPlayers).toBe(3);
+
+    app.renderLobbyDetails({
+      lobby_id: "fedcba",
+      lobby_name: "<Host>'s lobby",
+      is_public: true,
+      max_players: 2
+    });
+    expect(app.elements.lobbyMessage.textContent).toContain("<Host>'s lobby");
+    expect(app.elements.lobbyMessage.querySelector(".lobby-code-button")).toBeNull();
+    app.renderLobbyDetails({
+      lobby_id: "legacy",
+      lobby_name: "Legacy lobby",
+      is_public: true
+    });
+    expect(app.getState().lobbyMaxPlayers).toBe(4);
+  });
+
+  test("lists public lobbies, joins one, and handles an empty refresh", async () => {
+    globalThis.fetch
+      .mockResolvedValueOnce({ json: async () => [{
+        lobby_id: "abc123", name: "Alice's lobby", players: 1, max_players: 3
+      }] })
+      .mockResolvedValueOnce({ json: async () => ({ exists: true }) })
+      .mockResolvedValueOnce({ json: async () => [] });
+
+    await app.refreshPublicLobbies();
+    expect(app.elements.publicLobbiesList.textContent).toContain("Alice's lobby");
+    expect(app.elements.publicLobbiesList.textContent).toContain("1/3 players");
+    app.elements.publicLobbiesList.querySelector(".public-lobby-join-button").click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(FakeWebSocket.instances.at(-1).url).toContain("/ws/lobby/");
+
+    globalThis.fetch.mockResolvedValueOnce({ json: async () => [] });
+    await app.refreshPublicLobbies();
+    expect(app.elements.publicLobbiesList.textContent).toContain("No public lobbies");
+
+    globalThis.fetch.mockRejectedValueOnce(new Error("offline"));
+    await app.refreshPublicLobbies();
+    expect(app.elements.refreshLobbiesButton.disabled).toBe(false);
   });
 
   test("preload tolerates decode and network failures", async () => {
@@ -264,9 +348,12 @@ describe("messages and game UI", () => {
     expect(app.getState().userId).toBe("server-id");
     expect(app.getState().lobbyCapabilities).toEqual(["kick_users"]);
 
-    app.handleWebSocketMessage({ data: JSON.stringify({ type: "lcr", lobby_id: "abcdef", msg: "Created" }) });
-    app.handleWebSocketMessage({ data: JSON.stringify({ type: "jdl", lobby_id: "abcdef", msg: "Joined", users: [] }) });
-    app.handleWebSocketMessage({ data: JSON.stringify({ type: "uu", users: [], is_host: true }) });
+    const lobbyData = {
+      lobby_id: "abcdef", lobby_name: "Host's lobby", is_public: true, max_players: 2
+    };
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "lcr", ...lobbyData }) });
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "jdl", ...lobbyData, users: [] }) });
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "uu", users: [], is_host: true, max_players: 2 }) });
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "tsb", enable: true }) });
     expect(app.elements.startButton.disabled).toBe(false);
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "lg", player_id: "missing" }) });
@@ -333,11 +420,12 @@ describe("messages and game UI", () => {
         { user_id: "me", user_name: "Me" },
         { user_id: "other", user_name: "Other" }
       ],
-      true
+      true,
+      2
     );
     expect(app.elements.usersList.children).toHaveLength(2);
     expect(app.elements.startButton.disabled).toBe(false);
-    expect(app.elements.addBotButton.disabled).toBe(false);
+    expect(app.elements.addBotButton.disabled).toBe(true);
 
     app.updateUsers(
       Array.from({ length: 4 }, (_, index) => ({
@@ -345,7 +433,8 @@ describe("messages and game UI", () => {
         user_name: index ? `Player ${index}` : "Alex Bot",
         is_bot: index === 0
       })),
-      undefined
+      undefined,
+      4
     );
     expect(app.elements.addBotButton.disabled).toBe(true);
 

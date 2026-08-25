@@ -283,7 +283,91 @@ button:active {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-top: 10vh;
+    margin-top: min(6vh, 45px);
+}
+
+.public-lobbies-panel {
+    width: min(92vw, 460px);
+    margin: 4px 0 12px;
+    padding: 10px;
+    border: 1px solid rgb(216 219 226 / 12%);
+    border-radius: 14px;
+    background: rgb(0 0 0 / 16%);
+    box-sizing: border-box;
+    color: #d8dbe2;
+}
+
+.public-lobbies-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.public-lobbies-header h2 {
+    margin: 0;
+    font-size: 20px;
+    cursor: default;
+}
+
+#refreshLobbiesButton {
+    width: 86px;
+    height: 32px;
+    font-size: 14px;
+}
+
+.public-lobbies-list {
+    display: grid;
+    gap: 7px;
+    max-height: 126px;
+    margin-top: 8px;
+    overflow-y: auto;
+}
+
+.public-lobby-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 38px;
+    padding: 5px 5px 5px 10px;
+    border-radius: 11px;
+    background: rgb(216 219 226 / 7%);
+    box-sizing: border-box;
+}
+
+.public-lobby-details {
+    min-width: 0;
+}
+
+.public-lobby-name {
+    overflow: hidden;
+    font-weight: bold;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.public-lobby-capacity,
+.public-lobbies-empty,
+.private-lobby-label {
+    color: rgb(216 219 226 / 72%);
+    font-size: 13px;
+}
+
+.public-lobbies-empty {
+    padding: 6px;
+    text-align: center;
+}
+
+.public-lobby-join-button {
+    flex: 0 0 auto;
+    width: 72px;
+    height: 30px;
+    font-size: 14px;
+}
+
+.private-lobby-label {
+    margin: 2px 0 6px;
 }
 
 .joinLobbyControls {
@@ -297,7 +381,7 @@ button:active {
 }
 
 #createLobbyButton {
-    margin: 35px 0 0 0;
+    margin: 16px 0 0 0;
 }
 
 .lobby-input {
@@ -337,7 +421,7 @@ button:active {
     box-shadow: none;
 }
 
-.rules-widget-window, .game-over-widget-window {
+.rules-widget-window, .game-over-widget-window, .create-lobby-window {
     display: none;
     position: fixed;
     top: 0;
@@ -350,13 +434,125 @@ button:active {
     z-index: 1;
 }
 
-.rules-widget-content, .game-over-widget-content {
+.rules-widget-content, .game-over-widget-content, .create-lobby-content {
     background-color: rgba(255, 240, 212, 1);
     width: min(80vw, 55vh);
     overflow-y: auto;
     position: relative;
     border-radius: 20px;
     box-shadow: 0 0 30px 20px rgba(255, 165, 0, 0.7);
+}
+
+.create-lobby-content {
+    width: min(90vw, 560px);
+    padding: 24px 20px 20px;
+    overflow: visible;
+    box-sizing: border-box;
+}
+
+.create-lobby-content h2 {
+    margin: 0 0 18px;
+    color: #333;
+    cursor: default;
+}
+
+.close-widget {
+    position: absolute;
+    top: 5px;
+    right: 7px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgb(0 0 0 / 12%);
+    font-family: Arial, sans-serif;
+    font-size: 25px;
+    line-height: 28px;
+    box-shadow: none;
+}
+
+.lobby-type-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.lobby-type-option {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    gap: 9px;
+    text-align: center;
+}
+
+.lobby-type-option button {
+    width: min(190px, 100%);
+}
+
+.lobby-type-option p {
+    max-width: 210px;
+    color: #555;
+    font-size: 14px;
+    line-height: 1.3;
+}
+
+.player-count-selector {
+    margin: 22px 0 0;
+    padding: 12px;
+    border: 1px solid rgb(125 125 125 / 35%);
+    border-radius: 13px;
+    text-align: center;
+}
+
+.player-count-selector legend {
+    padding: 0 7px;
+    color: #444;
+    font-size: 14px;
+}
+
+.player-count-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.player-count-buttons button {
+    width: 55px;
+    height: 38px;
+}
+
+.player-count-buttons button.selected {
+    color: #6b3c00;
+    border-color: #ffa500;
+    background: #fff0d4;
+    box-shadow: 0 0 8px 2px rgb(255 165 0 / 45%);
+}
+
+.lobby-summary {
+    max-width: min(92vw, 520px);
+    margin: 0 auto;
+    color: #d8dbe2;
+    text-align: center;
+}
+
+.lobby-summary-name {
+    font-size: 21px;
+}
+
+.lobby-summary-meta {
+    margin-top: 4px;
+    color: rgb(216 219 226 / 72%);
+    font-size: 14px;
+}
+
+.lobby-code-button {
+    width: auto;
+    height: 34px;
+    margin-top: 7px;
+    padding: 0 14px;
+    font-family: monospace;
+    font-size: 15px;
 }
 
 .close-rules-widget {
@@ -721,6 +917,58 @@ footer p {
 }
 
 @media (max-width: 480px) {
+    .preLobbyControls {
+        margin-top: 3vh;
+    }
+
+    #welcomeMessage {
+        width: 92vw;
+        margin: 8px 0;
+        font-size: 19px;
+    }
+
+    .public-lobbies-panel {
+        padding: 8px;
+    }
+
+    .joinLobbyControls {
+        width: 92vw;
+        justify-content: center;
+    }
+
+    .joinLobbyControls input {
+        min-width: 0;
+        width: 52vw;
+    }
+
+    .joinLobbyControls button {
+        width: 112px;
+    }
+
+    .create-lobby-content {
+        padding: 22px 14px 16px;
+    }
+
+    .lobby-type-options {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .lobby-type-option {
+        display: grid;
+        grid-template-columns: minmax(130px, 44%) 1fr;
+        gap: 10px;
+        text-align: left;
+    }
+
+    .lobby-type-option p {
+        font-size: 13px;
+    }
+
+    .player-count-selector {
+        margin-top: 17px;
+    }
+
     .buttonContainer {
         flex-direction: column;
         align-items: center;

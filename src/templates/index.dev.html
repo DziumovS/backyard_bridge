@@ -54,21 +54,30 @@
             </div>
 
             <div class="preLobbyControls">
-                <h2 id="welcomeMessage">To start the game create a lobby or join your friends by their lobby ID!</h2>
+                <h2 id="welcomeMessage">Create a lobby or join an open game!</h2>
                 <div class="errorMessage">
                     <div id="errorMessage" role="alert" aria-live="assertive"></div>
                 </div>
 
+                <section class="public-lobbies-panel" id="publicLobbiesPanel" aria-labelledby="publicLobbiesTitle">
+                    <div class="public-lobbies-header">
+                        <h2 id="publicLobbiesTitle">Public Lobbies</h2>
+                        <button id="refreshLobbiesButton" type="button">Refresh</button>
+                    </div>
+                    <div id="publicLobbiesList" class="public-lobbies-list" aria-live="polite"></div>
+                </section>
+
+                <p class="private-lobby-label">Join a private lobby by code</p>
                 <div class="joinLobbyControls">
                     <input type="text" id="lobbyInput" placeholder="Enter lobby ID" />
                     <button id="joinLobbyButton" disabled>Join Lobby</button>
                 </div>
 
-                <button id="createLobbyButton">New Game</button>
+                <button id="createLobbyButton">Create Lobby</button>
 
                 <div id="lobbyControls" style="display: none;">
 
-                    <h2 id="lobbyMessage"></h2>
+                    <div id="lobbyMessage" class="lobby-summary" role="status"></div>
 
                     <div class="buttonContainer">
                         <button id="startButton" style="display: none;" disabled>Start Game</button>
@@ -78,6 +87,36 @@
 
                 </div>
 
+            </div>
+
+            <div id="create-lobby-widget" class="create-lobby-window" role="dialog" aria-modal="true"
+                 aria-labelledby="createLobbyTitle">
+                <div class="create-lobby-content">
+                    <button id="closeCreateLobbyWidget" class="close-widget" type="button"
+                            aria-label="Close create lobby dialog">&times;</button>
+                    <h2 id="createLobbyTitle">Create Lobby</h2>
+
+                    <div class="lobby-type-options">
+                        <div class="lobby-type-option">
+                            <button id="createPublicLobbyButton" type="button">Public Lobby</button>
+                            <p>Any player can find and join this lobby.</p>
+                        </div>
+                        <div class="lobby-type-option">
+                            <button id="createPrivateLobbyButton" type="button">Private Lobby</button>
+                            <p>Players can join only with the lobby code.</p>
+                        </div>
+                    </div>
+
+                    <fieldset class="player-count-selector">
+                        <legend>Number of players (including you)</legend>
+                        <div class="player-count-buttons">
+                            <button type="button" data-player-count="2" aria-pressed="false">2</button>
+                            <button type="button" data-player-count="3" aria-pressed="false">3</button>
+                            <button type="button" data-player-count="4" aria-pressed="true"
+                                    class="selected">4</button>
+                        </div>
+                    </fieldset>
+                </div>
             </div>
 
             <div id="currentCards" style="display: none;">
