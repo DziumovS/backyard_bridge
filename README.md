@@ -17,6 +17,12 @@ American first names followed by `Bot`, follow the same authoritative rules as
 human players, and choose moves aimed at emptying their hand. Before the game
 starts, the host can remove either human guests or bots from the lobby.
 
+Hosts choose an exact lobby size from 2 to 4 players. Public lobbies are listed
+on the home screen and can be joined directly; private lobbies are omitted from
+that list and use the existing six-character invitation code. Lobby state is
+kept in memory and each lobby is named after its host, for example
+`Alice's lobby`.
+
 ### MAIN RULES:
 1) `Players are dealt` 5 cards each; the first player automatically plays a random card from his hand.  
 2) `The game starts` with each player having 0 points. The number of points can range from negative infinity to more than 125.  
@@ -88,10 +94,10 @@ npm test
 
 The server suite includes real WebSocket sessions for every supported player
 count (2, 3, and 4). Both server and client coverage thresholds are at least
-99%. Browser layout tests cover the responsive lobby geometry and mobile touch
-focus behavior. Install Chromium once with `npx playwright install chromium`
-before running `npm test` locally. GitHub Actions runs every suite for pushes
-and pull requests.
+99%. Browser tests cover responsive lobby geometry, mobile touch focus,
+public-lobby discovery and joining, and private lobby codes. Install Chromium
+once with `npx playwright install chromium` before running `npm test` locally.
+GitHub Actions runs every suite for pushes and pull requests.
 
 ## DEPLOYMENT
 
