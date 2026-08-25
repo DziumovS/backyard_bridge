@@ -7,9 +7,21 @@ from src.bot.models import BotPlayer, BotUser
 
 
 class Lobby:
-    def __init__(self, lobby_id: str, host: User):
+    def __init__(
+        self,
+        lobby_id: str,
+        host: User,
+        *,
+        is_public: bool = False,
+        max_players: int = 4,
+    ):
+        if not 2 <= max_players <= 4:
+            raise ValueError("Lobby size must be between 2 and 4 players.")
         self.lobby_id = lobby_id
         self.host = host
+        self.name = f"{host.user_name}'s lobby"
+        self.is_public = is_public
+        self.max_players = max_players
         self.in_game = False
         self.disconnect_lock = asyncio.Lock()
         self.users: dict[str, User] = {host.user_id: host}
@@ -19,6 +31,18 @@ class Lobby:
 
     def add_user(self, user: User) -> None:
         self.users[user.user_id] = user
+
+    @property
+    def is_full(self) -> bool:
+        return len(self.users) >= self.max_players
+
+    def get_summary(self) -> dict:
+        return {
+            "lobby_id": self.lobby_id,
+            "name": self.name,
+            "players": len(self.users),
+            "max_players": self.max_players,
+        }
 
     def get_user(self, user_id: str) -> User | None:
         return self.users.get(user_id)

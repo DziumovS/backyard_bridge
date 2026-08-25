@@ -13,10 +13,21 @@ from tests.conftest import FakeWebSocket
 
 
 def test_lobby_model(users):
-    lobby = Lobby("abc", users[0])
+    lobby = Lobby("abc", users[0], is_public=True, max_players=2)
+    assert lobby.name == "Player 1's lobby"
+    assert lobby.is_public
+    assert lobby.max_players == 2
+    assert not lobby.is_full
+    assert lobby.get_summary() == {
+        "lobby_id": "abc",
+        "name": "Player 1's lobby",
+        "players": 1,
+        "max_players": 2,
+    }
     assert lobby.is_host(users[0].user_id)
     assert not lobby.is_host(users[1].user_id)
     lobby.add_user(users[1])
+    assert lobby.is_full
     assert lobby.get_user(users[1].user_id) is users[1]
     assert lobby.get_user("missing") is None
     assert lobby.get_users() == [
@@ -29,6 +40,8 @@ def test_lobby_model(users):
     lobby.remove_user("missing")
     lobby.remove_user(users[1].user_id)
     assert list(lobby.users) == [users[0].user_id]
+    with pytest.raises(ValueError, match="between 2 and 4"):
+        Lobby("invalid", users[0], max_players=1)
 
 
 def test_lobby_manager_lookup_and_id(users, monkeypatch):
@@ -42,6 +55,16 @@ def test_lobby_manager_lookup_and_id(users, monkeypatch):
     assert manager.get_lobby("missing") is None
     assert manager.get_lobby_by_user_id(users[0].user_id) is first
     assert manager.get_lobby_by_user_id("missing") is None
+    public = Lobby("public", users[1], is_public=True, max_players=3)
+    full_public = Lobby("full", users[2], is_public=True, max_players=2)
+    full_public.add_user(users[3])
+    private = Lobby("private", users[3], max_players=2)
+    manager.add_lobby(public)
+    manager.add_lobby(full_public)
+    manager.add_lobby(private)
+    assert manager.get_public_lobbies() == [public.get_summary()]
+    public.in_game = True
+    assert manager.get_public_lobbies() == []
     manager.remove_lobby(first.lobby_id)
     assert manager.get_lobby_by_user_id(users[0].user_id) is None
 
@@ -52,9 +75,18 @@ async def test_create_join_start_and_disconnect_lobby(users):
     manager.generate_lobby_id = lambda: "lobby"
     host, guest = users[:2]
 
-    await manager.handlers.handle_create_lobby(host, host.websocket)
+    await manager.handlers.handle_create_lobby(
+        host,
+        host.websocket,
+        is_public=True,
+        max_players=2,
+    )
     lobby = manager.get_lobby("lobby")
     assert lobby is not None
+    assert lobby.name == "Player 1's lobby"
+    assert lobby.is_public and lobby.max_players == 2
+    assert host.websocket.sent[0]["lobby_name"] == lobby.name
+    assert host.websocket.sent[1]["max_players"] == 2
     assert [message["type"] for message in host.websocket.sent] == ["lcr", "uu", "tsb"]
     assert not host.websocket.sent[-1]["enable"]
 

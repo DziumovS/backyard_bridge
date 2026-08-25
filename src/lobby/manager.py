@@ -24,6 +24,13 @@ class LobbyManager:
     def get_lobby(self, lobby_id: str) -> Lobby | None:
         return self.lobbies.get(lobby_id)
 
+    def get_public_lobbies(self) -> list[dict]:
+        return [
+            lobby.get_summary()
+            for lobby in self.lobbies.values()
+            if lobby.is_public and not lobby.in_game and not lobby.is_full
+        ]
+
     def add_lobby(self, lobby: Lobby) -> None:
         self.lobbies[lobby.lobby_id] = lobby
         for user_id in lobby.users:

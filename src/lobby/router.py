@@ -25,15 +25,20 @@ router = APIRouter(
 connection_manager = ConnectionManager()
 lobby_manager = LobbyManager(connection_manager)
 game_manager = GameManager(connection_manager)
-LOBBY_CAPABILITIES = ["kick_users"]
+LOBBY_CAPABILITIES = ["kick_users", "lobby_configuration", "public_lobbies"]
 
 
 @router.get("/check_lobby/{lobby_id}")
 async def check_lobby(lobby_id: str):
     lobby = lobby_manager.lobbies.get(lobby_id)
-    exists = lobby is not None and not lobby.in_game and len(lobby.users) < 4
+    exists = lobby is not None and not lobby.in_game and not lobby.is_full
     message = "The lobby doesn't exist or no slots."
     return JSONResponse(content={"exists": exists, "msg": message})
+
+
+@router.get("/public_lobbies")
+async def get_public_lobbies():
+    return JSONResponse(content=lobby_manager.get_public_lobbies())
 
 
 @router.get("/rules")
@@ -72,7 +77,12 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
 
             match message.type:
                 case EventType.CREATE_LOBBY.value:
-                    await lobby_manager.handlers.handle_create_lobby(user=user, websocket=websocket)
+                    await lobby_manager.handlers.handle_create_lobby(
+                        user=user,
+                        websocket=websocket,
+                        is_public=data["is_public"],
+                        max_players=data["max_players"],
+                    )
 
                 case EventType.CLOSE_LOBBY.value:
                     lobby = lobby_manager.get_lobby_by_user_id(user_id=user.user_id)

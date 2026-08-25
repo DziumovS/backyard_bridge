@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import websockets
+import httpx2
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -41,6 +42,7 @@ def test_http_endpoints():
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/public_lobbies").json() == []
 
     rules = client.get("/rules")
     assert rules.status_code == 200 and "MAIN RULES" in rules.json()["rules"]
@@ -62,7 +64,9 @@ def test_http_endpoints():
 async def test_lobby_websocket_end_to_end(live_server):
     ws_base = live_server.replace("http://", "ws://")
     async with websockets.connect(f"{ws_base}/ws/lobby/host") as host:
-        await host.send(json.dumps({"type": "crl", "user_name": "Host"}))
+        await host.send(json.dumps({
+            "type": "crl", "user_name": "Host", "is_public": True, "max_players": 2,
+        }))
         session = await _receive_json(host)
         created = await _receive_json(host)
         users = await _receive_json(host)
@@ -70,7 +74,13 @@ async def test_lobby_websocket_end_to_end(live_server):
         lobby_id = created["lobby_id"]
         assert created["type"] == "lcr"
         assert session["type"] == "sid"
-        assert session["capabilities"] == ["kick_users"]
+        assert session["capabilities"] == [
+            "kick_users", "lobby_configuration", "public_lobbies",
+        ]
+        assert created["lobby_name"] == "Host's lobby"
+        assert created["is_public"] is True
+        assert created["max_players"] == 2
+        assert users["max_players"] == 2
         assert users["users"] == [
             {"user_id": session["user_id"], "user_name": "Host", "is_bot": False}
         ]
@@ -92,12 +102,68 @@ async def test_lobby_websocket_end_to_end(live_server):
 
 @pytest.mark.e2e
 @pytest.mark.anyio
+async def test_public_lobby_discovery_excludes_private_and_full_lobbies(live_server):
+    ws_base = live_server.replace("http://", "ws://")
+    public_host = await websockets.connect(f"{ws_base}/ws/lobby/public-host")
+    private_host = await websockets.connect(f"{ws_base}/ws/lobby/private-host")
+    guest = None
+    try:
+        await public_host.send(json.dumps({
+            "type": "crl", "user_name": "Alice", "is_public": True, "max_players": 2,
+        }))
+        await _receive_json(public_host)
+        public_created = await _receive_json(public_host)
+        await _receive_json(public_host)
+        await _receive_json(public_host)
+
+        await private_host.send(json.dumps({
+            "type": "crl", "user_name": "Bob", "is_public": False, "max_players": 4,
+        }))
+        await _receive_json(private_host)
+        private_created = await _receive_json(private_host)
+        await _receive_json(private_host)
+        await _receive_json(private_host)
+
+        assert httpx2.get(f"{live_server}/public_lobbies").json() == [{
+            "lobby_id": public_created["lobby_id"],
+            "name": "Alice's lobby",
+            "players": 1,
+            "max_players": 2,
+        }]
+        assert private_created["lobby_id"] != public_created["lobby_id"]
+
+        guest = await websockets.connect(f"{ws_base}/ws/lobby/public-guest")
+        await guest.send(json.dumps({
+            "type": "jl",
+            "user_name": "Guest",
+            "lobby_id": public_created["lobby_id"],
+        }))
+        await _receive_json(guest)
+        joined = await _receive_json(guest)
+        assert joined["lobby_name"] == "Alice's lobby"
+        assert joined["is_public"] is True
+        assert joined["max_players"] == 2
+        await _receive_json(guest)
+        await _receive_json(public_host)
+        await _receive_json(public_host)
+        assert httpx2.get(f"{live_server}/public_lobbies").json() == []
+    finally:
+        if guest is not None:
+            await guest.close()
+        await public_host.close()
+        await private_host.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.anyio
 async def test_host_kicks_human_and_bot_from_lobby(live_server):
     ws_base = live_server.replace("http://", "ws://")
     host = await websockets.connect(f"{ws_base}/ws/lobby/kick-host")
     guest = None
     try:
-        await host.send(json.dumps({"type": "crl", "user_name": "Host"}))
+        await host.send(json.dumps({
+            "type": "crl", "user_name": "Host", "is_public": False, "max_players": 3,
+        }))
         host_session = await _receive_json(host)
         created = await _receive_json(host)
         lobby_id = created["lobby_id"]
@@ -126,7 +192,7 @@ async def test_host_kicks_human_and_bot_from_lobby(live_server):
 
         await host.send(json.dumps({"type": "ku", "user_id": bot_id}))
         assert len((await _receive_json(host))["users"]) == 2
-        assert await _receive_json(host) == {"type": "tsb", "enable": True}
+        assert await _receive_json(host) == {"type": "tsb", "enable": False}
         assert len((await _receive_json(guest))["users"]) == 2
 
         await host.send(json.dumps({"type": "ku", "user_id": guest_session["user_id"]}))
@@ -155,7 +221,12 @@ async def _create_started_lobby(ws_base, player_count):
     sessions = []
     host = await websockets.connect(f"{ws_base}/ws/lobby/browser-host")
     lobby_sockets.append(host)
-    await host.send(json.dumps({"type": "crl", "user_name": "Player 1"}))
+    await host.send(json.dumps({
+        "type": "crl",
+        "user_name": "Player 1",
+        "is_public": False,
+        "max_players": player_count,
+    }))
     sessions.append(await _receive_json(host))
     created = await _receive_json(host)
     game_id = created["lobby_id"]
@@ -175,7 +246,9 @@ async def _create_started_lobby(ws_base, player_count):
         assert len(update["users"]) == index
         for existing in lobby_sockets[:-1]:
             assert (await _receive_json(existing))["type"] == "uu"
-        assert (await _receive_json(host)) == {"type": "tsb", "enable": True}
+        assert (await _receive_json(host)) == {
+            "type": "tsb", "enable": index == player_count,
+        }
 
     return game_id, sessions, lobby_sockets
 
@@ -188,7 +261,12 @@ async def test_host_can_play_with_bots_at_every_supported_player_count(live_serv
     lobby_socket = await websockets.connect(f"{ws_base}/ws/lobby/bot-host")
     game_socket = None
     try:
-        await lobby_socket.send(json.dumps({"type": "crl", "user_name": "Host"}))
+        await lobby_socket.send(json.dumps({
+            "type": "crl",
+            "user_name": "Host",
+            "is_public": False,
+            "max_players": player_count,
+        }))
         session = await _receive_json(lobby_socket)
         created = await _receive_json(lobby_socket)
         game_id = created["lobby_id"]
@@ -201,7 +279,9 @@ async def test_host_can_play_with_bots_at_every_supported_player_count(live_serv
             update = await _receive_json(lobby_socket)
             toggle = await _receive_json(lobby_socket)
             assert update["type"] == "uu"
-            assert toggle == {"type": "tsb", "enable": True}
+            assert toggle == {
+                "type": "tsb", "enable": expected_size == player_count,
+            }
             assert len(update["users"]) == expected_size
             latest_users = update["users"]
 
@@ -507,6 +587,8 @@ async def test_lobby_router_dispatches_all_events(monkeypatch):
     await websocket_lobby(ws, "user")
 
     create.assert_awaited_once()
+    assert create.await_args.kwargs["is_public"] is False
+    assert create.await_args.kwargs["max_players"] == 4
     join.assert_awaited_once()
     add_bot.assert_awaited_once()
     kick_user.assert_awaited_once()

@@ -43,6 +43,15 @@ def test_lobby_protocol_rejects_invalid_messages(payload):
 def test_protocol_strips_names_and_validates_cards():
     message = lobby_message_adapter.validate_python({"type": "crl", "user_name": "  Name  "})
     assert message.user_name == "Name"
+    assert not message.is_public and message.max_players == 4
+    configured = lobby_message_adapter.validate_python({
+        "type": "crl", "user_name": "Name", "is_public": True, "max_players": 2,
+    })
+    assert configured.is_public and configured.max_players == 2
+    with pytest.raises(ValidationError):
+        lobby_message_adapter.validate_python({
+            "type": "crl", "user_name": "Name", "is_public": True, "max_players": 5,
+        })
     assert lobby_message_adapter.validate_python({"type": "ab"}).type == "ab"
     kick = lobby_message_adapter.validate_python({"type": "ku", "user_id": "player-1"})
     assert kick.user_id == "player-1"
@@ -89,7 +98,7 @@ async def test_lobby_rejects_full_ingame_and_duplicate_users(users):
 @pytest.mark.anyio
 async def test_only_host_can_start_valid_lobby(users):
     manager = LobbyManager(ConnectionManager())
-    lobby = Lobby("abcdef", users[0])
+    lobby = Lobby("abcdef", users[0], max_players=2)
     manager.add_lobby(lobby)
     assert await manager.handlers.handle_start_game(users[0].user_id) is None
     manager.add_user(lobby, users[1])

@@ -18,6 +18,8 @@ Username = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
 class CreateLobbyMessage(Message):
     type: Literal["crl"]
     user_name: Username
+    is_public: bool = False
+    max_players: int = Field(default=4, ge=2, le=4)
 
 
 class JoinLobbyMessage(Message):
