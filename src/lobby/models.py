@@ -44,6 +44,17 @@ class Lobby:
             "max_players": self.max_players,
         }
 
+    def get_listing_summary(self) -> dict:
+        summary = {
+            "name": self.name,
+            "players": len(self.users),
+            "max_players": self.max_players,
+            "is_private": not self.is_public,
+        }
+        if self.is_public:
+            summary["lobby_id"] = self.lobby_id
+        return summary
+
     def get_user(self, user_id: str) -> User | None:
         return self.users.get(user_id)
 
@@ -53,7 +64,12 @@ class Lobby:
 
     def get_users(self) -> list[dict]:
         return [
-            {"user_id": user.user_id, "user_name": user.user_name, "is_bot": user.is_bot}
+            {
+                "user_id": user.user_id,
+                "user_name": user.user_name,
+                "is_bot": user.is_bot,
+                "is_host": self.is_host(user.user_id),
+            }
             for user in self.users.values()
         ]
 

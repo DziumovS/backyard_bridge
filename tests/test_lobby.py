@@ -24,6 +24,13 @@ def test_lobby_model(users):
         "players": 1,
         "max_players": 2,
     }
+    assert lobby.get_listing_summary() == {
+        "lobby_id": "abc",
+        "name": "Player 1's lobby",
+        "players": 1,
+        "max_players": 2,
+        "is_private": False,
+    }
     assert lobby.is_host(users[0].user_id)
     assert not lobby.is_host(users[1].user_id)
     lobby.add_user(users[1])
@@ -31,8 +38,8 @@ def test_lobby_model(users):
     assert lobby.get_user(users[1].user_id) is users[1]
     assert lobby.get_user("missing") is None
     assert lobby.get_users() == [
-        {"user_id": "1", "user_name": "Player 1", "is_bot": False},
-        {"user_id": "2", "user_name": "Player 2", "is_bot": False},
+        {"user_id": "1", "user_name": "Player 1", "is_bot": False, "is_host": True},
+        {"user_id": "2", "user_name": "Player 2", "is_bot": False, "is_host": False},
     ]
     assert lobby.get_users_websocket() == [users[0].websocket, users[1].websocket]
     players = lobby.create_player_list()
@@ -63,8 +70,19 @@ def test_lobby_manager_lookup_and_id(users, monkeypatch):
     manager.add_lobby(full_public)
     manager.add_lobby(private)
     assert manager.get_public_lobbies() == [public.get_summary()]
+    assert manager.get_available_lobbies() == [
+        first.get_listing_summary(),
+        public.get_listing_summary(),
+        private.get_listing_summary(),
+    ]
+    assert "lobby_id" not in private.get_listing_summary()
+    assert manager.get_quick_play_lobby() == public.get_summary()
     public.in_game = True
     assert manager.get_public_lobbies() == []
+    assert manager.get_available_lobbies() == [
+        first.get_listing_summary(), private.get_listing_summary(),
+    ]
+    assert manager.get_quick_play_lobby() is None
     manager.remove_lobby(first.lobby_id)
     assert manager.get_lobby_by_user_id(users[0].user_id) is None
 
