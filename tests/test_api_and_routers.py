@@ -1,6 +1,6 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import websockets
@@ -14,6 +14,7 @@ from src.game.errors import InvalidAction
 from src.game.router import websocket_game
 from src.lobby.router import game_manager, lobby_manager, websocket_lobby
 from src.lobby.errors import LobbyActionError
+from src.lobby.models import Lobby
 from src.user.models import Player
 from tests.conftest import FakeWebSocket
 
@@ -27,7 +28,7 @@ def clear_global_state():
     game_manager.clear()
 
 
-def test_http_endpoints():
+def test_http_endpoints(monkeypatch):
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200
@@ -42,7 +43,10 @@ def test_http_endpoints():
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/.well-known/appspecific/com.chrome.devtools.json").status_code == 204
     assert client.get("/public_lobbies").json() == []
+    assert client.get("/lobbies").json() == []
+    assert client.get("/quick_play").json() is None
 
     rules = client.get("/rules")
     assert rules.status_code == 200 and "MAIN RULES" in rules.json()["rules"]
@@ -54,9 +58,16 @@ def test_http_endpoints():
     assert cards.headers["cache-control"] == "public, max-age=86400"
     static_css = client.get("/static/css/styles.css", headers={"Accept-Encoding": "gzip"})
     assert static_css.status_code == 200
-    assert static_css.headers["cache-control"] == "public, max-age=3600, must-revalidate"
+    assert static_css.headers["cache-control"] == "no-cache"
+    static_js = client.get("/static/js/script.js")
+    assert static_js.headers["cache-control"] == "no-cache"
     assert static_css.headers["content-encoding"] == "gzip"
     assert response.headers["cache-control"] == "no-store"
+
+    monkeypatch.setenv("BACKYARD_BRIDGE_DEV_ASSETS", "1")
+    development_page = client.get("/")
+    assert "script.dev.js" in development_page.text
+    assert "styles.dev.css" in development_page.text
 
 
 @pytest.mark.e2e
@@ -75,14 +86,14 @@ async def test_lobby_websocket_end_to_end(live_server):
         assert created["type"] == "lcr"
         assert session["type"] == "sid"
         assert session["capabilities"] == [
-            "kick_users", "lobby_configuration", "public_lobbies",
+            "kick_users", "lobby_configuration", "lobby_discovery", "quick_play",
         ]
         assert created["lobby_name"] == "Host's lobby"
         assert created["is_public"] is True
         assert created["max_players"] == 2
         assert users["max_players"] == 2
         assert users["users"] == [
-            {"user_id": session["user_id"], "user_name": "Host", "is_bot": False}
+            {"user_id": session["user_id"], "user_name": "Host", "is_bot": False, "is_host": True}
         ]
         assert toggle == {"type": "tsb", "enable": False}
 
@@ -130,6 +141,22 @@ async def test_public_lobby_discovery_excludes_private_and_full_lobbies(live_ser
             "players": 1,
             "max_players": 2,
         }]
+        assert httpx2.get(f"{live_server}/lobbies").json() == [
+            {
+                "lobby_id": public_created["lobby_id"],
+                "name": "Alice's lobby",
+                "players": 1,
+                "max_players": 2,
+                "is_private": False,
+            },
+            {
+                "name": "Bob's lobby",
+                "players": 1,
+                "max_players": 4,
+                "is_private": True,
+            },
+        ]
+        assert httpx2.get(f"{live_server}/quick_play").json()["lobby_id"] == public_created["lobby_id"]
         assert private_created["lobby_id"] != public_created["lobby_id"]
 
         guest = await websockets.connect(f"{ws_base}/ws/lobby/public-guest")
@@ -147,11 +174,138 @@ async def test_public_lobby_discovery_excludes_private_and_full_lobbies(live_ser
         await _receive_json(public_host)
         await _receive_json(public_host)
         assert httpx2.get(f"{live_server}/public_lobbies").json() == []
+        assert httpx2.get(f"{live_server}/quick_play").json() is None
     finally:
         if guest is not None:
             await guest.close()
         await public_host.close()
         await private_host.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.anyio
+async def test_private_lobby_requires_correct_code_and_rejects_full_room(live_server):
+    ws_base = live_server.replace("http://", "ws://")
+    host = await websockets.connect(f"{ws_base}/ws/lobby/private-code-host")
+    valid_guest = wrong_guest = extra_guest = None
+    try:
+        await host.send(json.dumps({
+            "type": "crl", "user_name": "Host", "is_public": False, "max_players": 2,
+        }))
+        await _receive_json(host)
+        created = await _receive_json(host)
+        await _receive_json(host)
+        await _receive_json(host)
+
+        wrong_guest = await websockets.connect(f"{ws_base}/ws/lobby/wrong-code")
+        await wrong_guest.send(json.dumps({
+            "type": "jl", "user_name": "Wrong", "lobby_id": "deadbe",
+        }))
+        assert (await _receive_json(wrong_guest))["type"] == "sid"
+        assert (await _receive_json(wrong_guest))["type"] == "se"
+
+        valid_guest = await websockets.connect(f"{ws_base}/ws/lobby/correct-code")
+        await valid_guest.send(json.dumps({
+            "type": "jl", "user_name": "Guest", "lobby_id": created["lobby_id"],
+        }))
+        assert (await _receive_json(valid_guest))["type"] == "sid"
+        assert (await _receive_json(valid_guest))["type"] == "jdl"
+        await _receive_json(valid_guest)
+        await _receive_json(host)
+        await _receive_json(host)
+
+        extra_guest = await websockets.connect(f"{ws_base}/ws/lobby/full-room")
+        await extra_guest.send(json.dumps({
+            "type": "jl", "user_name": "Extra", "lobby_id": created["lobby_id"],
+        }))
+        assert (await _receive_json(extra_guest))["type"] == "sid"
+        refusal = await _receive_json(extra_guest)
+        assert refusal["type"] == "se" and "no slots" in refusal["msg"]
+    finally:
+        for socket in (extra_guest, valid_guest, wrong_guest, host):
+            if socket is not None:
+                await socket.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.anyio
+async def test_game_can_start_below_capacity_and_removes_lobby_from_discovery(live_server):
+    ws_base = live_server.replace("http://", "ws://")
+    host = await websockets.connect(f"{ws_base}/ws/lobby/partial-host")
+    guest = await websockets.connect(f"{ws_base}/ws/lobby/partial-guest")
+    late = None
+    try:
+        await host.send(json.dumps({
+            "type": "crl", "user_name": "Host", "is_public": True, "max_players": 4,
+        }))
+        await _receive_json(host)
+        created = await _receive_json(host)
+        await _receive_json(host)
+        await _receive_json(host)
+        await guest.send(json.dumps({
+            "type": "jl", "user_name": "Guest", "lobby_id": created["lobby_id"],
+        }))
+        await _receive_json(guest)
+        await _receive_json(guest)
+        await _receive_json(guest)
+        await _receive_json(host)
+        assert await _receive_json(host) == {"type": "tsb", "enable": True}
+
+        await host.send('{"type":"sg"}')
+        assert (await _receive_json(guest))["type"] == "sg"
+        assert httpx2.get(f"{live_server}/lobbies").json() == []
+        assert httpx2.get(f"{live_server}/quick_play").json() is None
+
+        late = await websockets.connect(f"{ws_base}/ws/lobby/late")
+        await late.send(json.dumps({
+            "type": "jl", "user_name": "Late", "lobby_id": created["lobby_id"],
+        }))
+        assert (await _receive_json(late))["type"] == "sid"
+        assert (await _receive_json(late))["type"] == "se"
+    finally:
+        for socket in (late, guest, host):
+            if socket is not None:
+                await socket.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.anyio
+async def test_host_disconnect_immediately_closes_and_removes_lobby(live_server):
+    ws_base = live_server.replace("http://", "ws://")
+    host = await websockets.connect(f"{ws_base}/ws/lobby/disconnect-host")
+    guest = None
+    try:
+        await host.send(json.dumps({
+            "type": "crl", "user_name": "Host", "is_public": True, "max_players": 4,
+        }))
+        await _receive_json(host)
+        created = await _receive_json(host)
+        await _receive_json(host)
+        await _receive_json(host)
+
+        guest = await websockets.connect(f"{ws_base}/ws/lobby/disconnect-guest")
+        await guest.send(json.dumps({
+            "type": "jl", "user_name": "Guest", "lobby_id": created["lobby_id"],
+        }))
+        await _receive_json(guest)
+        await _receive_json(guest)
+        await _receive_json(guest)
+        await _receive_json(host)
+        await _receive_json(host)
+
+        await host.close()
+        closed = await _receive_json(guest)
+        assert closed == {
+            "type": "lcl",
+            "msg": "The host left the lobby, so you were returned to the home page",
+        }
+        await asyncio.sleep(0.05)
+        assert httpx2.get(f"{live_server}/lobbies").json() == []
+        assert httpx2.get(f"{live_server}/quick_play").json() is None
+    finally:
+        if guest is not None:
+            await guest.close()
+        await host.close()
 
 
 @pytest.mark.e2e
@@ -192,7 +346,7 @@ async def test_host_kicks_human_and_bot_from_lobby(live_server):
 
         await host.send(json.dumps({"type": "ku", "user_id": bot_id}))
         assert len((await _receive_json(host))["users"]) == 2
-        assert await _receive_json(host) == {"type": "tsb", "enable": False}
+        assert await _receive_json(host) == {"type": "tsb", "enable": True}
         assert len((await _receive_json(guest))["users"]) == 2
 
         await host.send(json.dumps({"type": "ku", "user_id": guest_session["user_id"]}))
@@ -247,7 +401,7 @@ async def _create_started_lobby(ws_base, player_count):
         for existing in lobby_sockets[:-1]:
             assert (await _receive_json(existing))["type"] == "uu"
         assert (await _receive_json(host)) == {
-            "type": "tsb", "enable": index == player_count,
+            "type": "tsb", "enable": True,
         }
 
     return game_id, sessions, lobby_sockets
@@ -280,7 +434,7 @@ async def test_host_can_play_with_bots_at_every_supported_player_count(live_serv
             toggle = await _receive_json(lobby_socket)
             assert update["type"] == "uu"
             assert toggle == {
-                "type": "tsb", "enable": expected_size == player_count,
+                "type": "tsb", "enable": True,
             }
             assert len(update["users"]) == expected_size
             latest_users = update["users"]
@@ -403,15 +557,17 @@ async def test_game_websocket_end_to_end_for_every_supported_player_count(live_s
     try:
         await lobby_sockets[1].send('{"type":"sg"}')
         rejected_start = await _receive_json(lobby_sockets[1])
-        assert rejected_start == {"type": "se", "msg": "Only the host can start a full game."}
+        assert rejected_start == {
+            "type": "se", "msg": "Only the host can start a game with at least 2 players.",
+        }
 
         if player_count == 4:
             fifth = await websockets.connect(f"{ws_base}/ws/lobby/fifth")
             try:
-                assert (await _receive_json(fifth))["type"] == "sid"
                 await fifth.send(json.dumps({
                     "type": "jl", "user_name": "Player 5", "lobby_id": game_id,
                 }))
+                assert (await _receive_json(fifth))["type"] == "sid"
                 refusal = await _receive_json(fifth)
                 assert refusal["type"] == "se"
                 assert "no slots" in refusal["msg"]
@@ -530,11 +686,23 @@ async def test_game_disconnects_for_every_supported_player_count(
         await sockets[target_id].close()
 
         remaining = {player_id: socket for player_id, socket in sockets.items() if player_id != target_id}
+        if target_id == sessions[0]["user_id"]:
+            for socket in remaining.values():
+                message = await _receive_json(socket)
+                assert message["type"] == "nep"
+                assert message["msg"] == "The host did not reconnect, so the game ended"
+            return
+
         states_after = {}
         announced_turns = set()
         for player_id, socket in remaining.items():
             assert (await _receive_json(socket)) == {"type": "lg", "player_id": target_id}
             assert (await _receive_json(socket))["type"] == "se"
+            if player_count == 2:
+                not_enough = await _receive_json(socket)
+                assert not_enough["type"] == "nep"
+                assert "not enough players" in not_enough["msg"]
+                continue
             whose_turn = await _receive_json(socket)
             assert whose_turn["type"] == "wt"
             announced_turns.add(whose_turn["current_player"])
@@ -542,15 +710,103 @@ async def test_game_disconnects_for_every_supported_player_count(
             assert state["type"] == "gd"
             states_after[player_id] = state
 
+        if player_count == 2:
+            return
         assert len(announced_turns) == 1
         assert target_id not in announced_turns
         assert all(len(state["players_hands"]) == player_count - 1 for state in states_after.values())
         _assert_synchronized(states_after)
-
-        if player_count == 2:
-            for socket in remaining.values():
-                assert (await _receive_json(socket))["type"] == "nep"
     finally:
+        await asyncio.gather(*[socket.close() for socket in sockets.values()])
+        await asyncio.gather(*[socket.close() for socket in lobby_sockets])
+
+
+@pytest.mark.e2e
+@pytest.mark.anyio
+@pytest.mark.parametrize("player_count", [2, 3, 4])
+async def test_regular_player_explicit_leave_for_every_supported_player_count(
+    live_server, player_count,
+):
+    ws_base = live_server.replace("http://", "ws://")
+    game_id, sessions, lobby_sockets = await _create_started_lobby(ws_base, player_count)
+    sockets = {}
+    try:
+        await lobby_sockets[0].send('{"type":"sg"}')
+        for guest in lobby_sockets[1:]:
+            assert (await _receive_json(guest))["type"] == "sg"
+        sockets = await _connect_game_clients(ws_base, game_id, sessions)
+        states, batches = await _collect_game_data(sockets)
+        current_id = next(
+            message["current_player"]
+            for messages in batches.values() for message in messages if message["type"] == "wt"
+        )
+        assert (await _receive_json(sockets[current_id]))["type"] == "ft"
+
+        leaving_id = sessions[1]["user_id"]
+        initial_deck_size = states[leaving_id]["deck_len"]
+        returned_cards = len(states[leaving_id]["hand"])
+        await sockets[leaving_id].send('{"type":"lg"}')
+
+        states_after = {}
+        for player_id, socket in sockets.items():
+            if player_id == leaving_id:
+                continue
+            assert await _receive_json(socket) == {"type": "lg", "player_id": leaving_id}
+            assert (await _receive_json(socket))["type"] == "se"
+            if player_count == 2:
+                assert (await _receive_json(socket))["type"] == "nep"
+                continue
+            assert (await _receive_json(socket))["type"] == "wt"
+            state = await _receive_json(socket)
+            assert state["type"] == "gd"
+            assert state["deck_len"] == initial_deck_size + returned_cards
+            states_after[player_id] = state
+
+        if player_count > 2:
+            assert all(
+                len(state["players_hands"]) == player_count - 1
+                for state in states_after.values()
+            )
+            _assert_synchronized(states_after)
+    finally:
+        await asyncio.gather(*[socket.close() for socket in sockets.values()])
+        await asyncio.gather(*[socket.close() for socket in lobby_sockets])
+
+
+@pytest.mark.e2e
+@pytest.mark.anyio
+async def test_game_websocket_session_resumes_with_same_hand(live_server):
+    ws_base = live_server.replace("http://", "ws://")
+    game_id, sessions, lobby_sockets = await _create_started_lobby(ws_base, 2)
+    sockets = {}
+    replacement = None
+    try:
+        await lobby_sockets[0].send('{"type":"sg"}')
+        assert (await _receive_json(lobby_sockets[1]))["type"] == "sg"
+        sockets = await _connect_game_clients(ws_base, game_id, sessions)
+        states, batches = await _collect_game_data(sockets)
+        current_id = next(
+            message["current_player"]
+            for messages in batches.values() for message in messages if message["type"] == "wt"
+        )
+        assert (await _receive_json(sockets[current_id]))["type"] == "ft"
+
+        guest_session = sessions[1]
+        guest_id = guest_session["user_id"]
+        original_hand = states[guest_id]["hand"]
+        await sockets[guest_id].close()
+        replacement = await websockets.connect(f"{ws_base}/ws/game/{game_id}/{guest_id}")
+        await replacement.send(json.dumps({
+            "type": "auth", "token": guest_session["session_token"],
+        }))
+        assert (await _receive_json(replacement))["type"] == "wt"
+        restored = await _receive_json(replacement)
+        assert restored["type"] == "gd"
+        assert restored["hand"] == original_hand
+        assert len(restored["players"]) == 2
+    finally:
+        if replacement is not None:
+            await replacement.close()
         await asyncio.gather(*[socket.close() for socket in sockets.values()])
         await asyncio.gather(*[socket.close() for socket in lobby_sockets])
 
@@ -605,12 +861,38 @@ async def test_lobby_router_close_and_disconnect_codes(monkeypatch):
     await websocket_lobby(FakeWebSocket([{"type": "cll"}]), "user")
     assert disconnect.await_count == 1
 
-    for code, called in [(1001, True), (1012, True), (1000, True)]:
+    for code in (1001, 1012, 1000):
         disconnect.reset_mock()
         await websocket_lobby(FakeWebSocket([WebSocketDisconnect(code)]), "user")
-        assert disconnect.await_count == int(called)
-        if called:
-            assert disconnect.await_args.kwargs["error"] is True
+        assert disconnect.await_count == 0
+
+
+@pytest.mark.anyio
+async def test_lobby_router_removes_lobby_on_unexpected_disconnect():
+    disconnected = FakeWebSocket([
+        {"type": "crl", "user_name": "Host"},
+        WebSocketDisconnect(1001),
+    ])
+    await websocket_lobby(disconnected, "host")
+    assert lobby_manager.lobbies == {}
+
+
+@pytest.mark.anyio
+async def test_started_game_router_restores_current_state(game):
+    game_manager.create_game(game)
+    game.has_started = True
+    player = game.players[0]
+    player.websocket = None
+    game.current_card = player.hand[0]
+    websocket = FakeWebSocket([
+        {"type": "auth", "token": player.session_token},
+        WebSocketDisconnect(1001),
+    ])
+
+    await websocket_game(websocket, game.game_id, player.user_id)
+
+    assert websocket.sent[0]["type"] == "wt"
+    assert websocket.sent[1]["type"] == "gd"
 
 
 @pytest.mark.anyio
@@ -657,36 +939,84 @@ async def test_game_router_dispatches_all_events(game, monkeypatch):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("leave_during_auth", [True, False], ids=["reconnect-dialog", "active-game"])
+async def test_game_router_handles_explicit_leave(game, monkeypatch, leave_during_auth):
+    game_manager.create_game(game)
+    player = game.players[0]
+    game.has_started = True
+    incoming = [{
+        "type": "auth",
+        "token": player.session_token,
+        "intent": "leave" if leave_during_auth else "connect",
+    }]
+    if not leave_during_auth:
+        incoming.append({"type": "lg"})
+    websocket = FakeWebSocket(incoming)
+    leave = AsyncMock()
+    monkeypatch.setattr(game_manager.event_handler, "handle_disconnect_game", leave)
+
+    await websocket_game(websocket, game.game_id, player.user_id)
+
+    leave.assert_awaited_once_with(player_id=player.user_id)
+    if leave_during_auth:
+        assert websocket.closed
+
+
+@pytest.mark.anyio
+async def test_game_router_reports_server_reconnect_deadline(game, monkeypatch):
+    game_manager.create_game(game)
+    player = game.players[0]
+    websocket = FakeWebSocket([{
+        "type": "auth", "token": player.session_token, "intent": "status",
+    }])
+    monkeypatch.setattr(game_manager, "reconnect_seconds_left", Mock(return_value=37.5))
+
+    await websocket_game(websocket, game.game_id, player.user_id)
+
+    assert websocket.sent == [{"type": "rs", "seconds": 37.5}]
+    assert websocket.closed
+
+
+@pytest.mark.anyio
 async def test_game_router_disconnect_paths(game, monkeypatch):
     game_manager.create_game(game)
     game.all_connected_event.set()
     game.players[0].websocket = None
     disconnect_game = AsyncMock()
     disconnect = AsyncMock()
+    schedule_disconnect = Mock(return_value=True)
     monkeypatch.setattr(game_manager.event_handler, "handle_disconnect_game", disconnect_game)
     monkeypatch.setattr(game_manager.connection_manager, "disconnect", disconnect)
+    monkeypatch.setattr(game_manager, "schedule_disconnect", schedule_disconnect)
 
-    await websocket_game(
-        FakeWebSocket([
+    first_socket = FakeWebSocket([
             {"type": "auth", "token": game.players[0].session_token},
             WebSocketDisconnect(1001),
-        ]),
-        game.game_id,
-        game.players[0].user_id,
+        ])
+    await websocket_game(first_socket, game.game_id, game.players[0].user_id)
+    schedule_disconnect.assert_called_once_with(
+        player_id=game.players[0].user_id, websocket=first_socket,
     )
-    disconnect_game.assert_awaited_once_with(player_id=game.players[0].user_id, error=True)
 
-    disconnect_game.reset_mock()
+    schedule_disconnect.reset_mock()
     game.players[0].websocket = None
-    await websocket_game(
-        FakeWebSocket([
+    second_socket = FakeWebSocket([
             {"type": "auth", "token": game.players[0].session_token},
             WebSocketDisconnect(1012),
-        ]),
-        game.game_id,
-        game.players[0].user_id,
+        ])
+    await websocket_game(second_socket, game.game_id, game.players[0].user_id)
+    schedule_disconnect.assert_called_once()
+
+    schedule_disconnect.reset_mock()
+    game.players[0].websocket = None
+    closed_socket = FakeWebSocket([
+        {"type": "auth", "token": game.players[0].session_token},
+        RuntimeError('WebSocket is not connected. Need to call "accept" first.'),
+    ])
+    await websocket_game(closed_socket, game.game_id, game.players[0].user_id)
+    schedule_disconnect.assert_called_once_with(
+        player_id=game.players[0].user_id, websocket=closed_socket,
     )
-    assert disconnect_game.await_count == 1
 
 
 @pytest.mark.anyio
@@ -749,7 +1079,7 @@ async def test_lobby_router_reports_protocol_and_start_errors(monkeypatch):
         "Invalid lobby message.",
         "Only the host can add a bot.",
         "Only the host can remove players.",
-        "Only the host can start a full game.",
+        "Only the host can start a game with at least 2 players.",
     ]
 
 
