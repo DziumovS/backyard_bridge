@@ -1,6 +1,6 @@
 # Backyard bridge
 Multiplayer card game, very similar to UNO.
-![](/src/static/readme.png)
+![Create a lobby, join a game, and play cards](/src/static/demo.gif)
 There are no winners. Only losers.
 
 ### DEMO
