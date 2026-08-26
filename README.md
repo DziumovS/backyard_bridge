@@ -17,11 +17,18 @@ American first names followed by `Bot`, follow the same authoritative rules as
 human players, and choose moves aimed at emptying their hand. Before the game
 starts, the host can remove either human guests or bots from the lobby.
 
-Hosts choose an exact lobby size from 2 to 4 players. Public lobbies are listed
-on the home screen and can be joined directly; private lobbies are omitted from
-that list and use the existing six-character invitation code. Lobby state is
-kept in memory and each lobby is named after its host, for example
-`Alice's lobby`.
+Hosts choose a maximum lobby size from 2 to 4 players. The lobby browser shows
+all open lobbies with their current capacity and marks private ones with a
+lock, without exposing their six-character invitation codes. Public lobbies
+can be joined from the list or through Quick Play. The same lobby browser has
+an invitation-code field for private lobbies, so public discovery and private
+joining do not need separate screens. Lobby state is kept in memory and each
+lobby is named after its host, for example `Alice's lobby`.
+
+The open lobby browser refreshes automatically every four seconds and can also
+be refreshed manually. Discovery and Quick Play are read-only HTTP GET
+requests; joining is an authenticated WebSocket command whose capacity, code,
+and game-state checks are enforced by the server.
 
 ### MAIN RULES:
 1) `Players are dealt` 5 cards each; the first player automatically plays a random card from his hand.  
@@ -71,8 +78,7 @@ installed automatically by `uv` when it is not already available.
 ```bash
 uv sync --locked
 npm ci
-npm run build
-uv run uvicorn main:app --reload
+BACKYARD_BRIDGE_DEV_ASSETS=1 uv run uvicorn main:app --reload
 ```
 
 Use `uv add <package>` for application dependencies and
@@ -81,8 +87,9 @@ when intentionally updating the complete Python dependency tree, and commit
 both `pyproject.toml` and `uv.lock`.
 
 The editable frontend sources are `src/static/js/script.dev.js`,
-`src/static/css/styles.dev.css`, and `src/templates/index.dev.html`. Run
-`npm run build` after changing them; `npm test` verifies that committed
+`src/static/css/styles.dev.css`, and `src/templates/index.dev.html`. The command
+above serves them directly, so minification is unnecessary during development.
+Run `npm run build` before committing; `npm test` verifies that committed
 production assets are current.
 
 ## TESTS
@@ -95,7 +102,8 @@ npm test
 The server suite includes real WebSocket sessions for every supported player
 count (2, 3, and 4). Both server and client coverage thresholds are at least
 99%. Browser tests cover responsive lobby geometry, mobile touch focus,
-public-lobby discovery and joining, and private lobby codes. Install Chromium
+public/private discovery and joining, private codes, and Quick Play capacity
+selection. Install Chromium
 once with `npx playwright install chromium` before running `npm test` locally.
 GitHub Actions runs every suite for pushes and pull requests.
 
@@ -128,6 +136,25 @@ be configured in seconds when needed:
 ```bash
 BACKYARD_BRIDGE_BOT_ACTION_DELAY=0.45
 ```
+
+Disconnected clients have 60 seconds to restore the same token-authenticated
+session after a game has started. The home screen displays a server-synchronized
+countdown with explicit reconnect and leave actions. Session credentials use
+per-tab storage, preventing another tab on the same browser from inheriting a
+player's seat. The timeout can be changed for development or testing without
+changing production behavior:
+
+```bash
+BACKYARD_BRIDGE_RECONNECT_GRACE_SECONDS=60
+```
+
+Before a game starts, disconnecting from a lobby removes that player
+immediately; disconnecting the host closes the lobby for everyone. During an
+active game, an expired timeout from the host closes the game. A regular player
+is removed and the remaining game continues when enough players remain. Players
+can also leave immediately from the game header: a host departure ends the game,
+while a guest's hand is shuffled back into the draw deck and any pending draw or
+skip effect moves to the next player.
 
 `GET /health` is available for platform health checks. WebSocket connections
 remain client-to-server by design; all authoritative game state and rule
