@@ -1,5 +1,6 @@
 import asyncio
 from html import escape
+from random import shuffle
 
 from src.game.enums import EventType
 from src.game.errors import InvalidAction
@@ -183,11 +184,42 @@ class EventHandler:
             if left_player is None:
                 return
 
+            if player_id == game.host_id:
+                game.is_active = False
+                host_message = (
+                    "The host did not reconnect, so the game ended"
+                    if error
+                    else "The host left the game, so you were returned to the home page"
+                )
+                await self.gm.connection_manager.broadcast(
+                    websockets=[
+                        player.websocket for player in game.players
+                        if player.user_id != player_id and player.websocket is not None
+                    ],
+                    message={
+                        "type": EventType.NOT_ENOUGH_PLAYERS.value,
+                        "msg": host_message,
+                    },
+                )
+                for player in game.players:
+                    await self.gm.connection_manager.disconnect(websocket=player.websocket)
+                self.gm.remove_game(game.game_id)
+                return
+
+            leaving_index = game.players.index(left_player)
+            effect_recipient = game.players[(leaving_index + 1) % len(game.players)]
+            if effect_recipient is not left_player:
+                effect_recipient.options.must_draw += left_player.options.must_draw
+                effect_recipient.options.must_skip = (
+                    effect_recipient.options.must_skip or left_player.options.must_skip
+                )
+
             if player_id == game.get_current_player().user_id:
                 game.next_player()
 
-            while left_player.hand:
-                game.deck.bounce_deck.append(left_player.hand.pop())
+            game.deck.deck.extend(left_player.hand)
+            left_player.hand.clear()
+            shuffle(game.deck.deck)
 
             next_player = game.get_current_player()
 
@@ -204,8 +236,6 @@ class EventHandler:
                 websockets=game.get_players_websocket(),
                 message={"type": EventType.SHOW_ERROR.value, "msg": message}
             )
-
-            await self.gm.send_turn_and_game_data_to_all(game=game, current_player=next_player)
 
             await self.gm.connection_manager.disconnect(websocket=left_player.websocket, error=error)
 
@@ -224,6 +254,7 @@ class EventHandler:
 
                 self.gm.remove_game(game.game_id)
             else:
+                await self.gm.send_turn_and_game_data_to_all(game=game, current_player=next_player)
                 await self.gm.run_bot_turns(game)
 
     async def handle_game_started(self, player_id: str, game, send_first_turn: bool = True) -> None:

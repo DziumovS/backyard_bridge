@@ -259,24 +259,67 @@ async def test_explicit_game_over_and_reset(game):
 
 
 @pytest.mark.anyio
-async def test_disconnect_player_and_close_game(game):
+async def test_disconnect_player_returns_hand_transfers_effects_and_closes_game(game, monkeypatch):
     manager, handler = setup_manager(game)
     third = Player("third", FakeWebSocket(), "Third")
     third.hand = [Card("9", "♥")]
     manager.add_player(game, third)
-    leaving = game.get_current_player()
-    leaving.hand = [Card("Q", "♠")]
+    leaving = next(player for player in game.players if player.user_id != game.host_id)
+    game.current_player_index = game.players.index(leaving)
+    returned_card = Card("Q", "♠")
+    leaving.hand = [returned_card]
+    leaving.options.must_draw = 2
+    leaving.options.must_skip = True
+    recipient = game.get_next_player()
+    initial_deck_size = len(game.deck.deck)
+    shuffled = []
+    monkeypatch.setattr("src.game.handlers.shuffle", lambda cards: shuffled.append(list(cards)))
 
     await handler.handle_disconnect_game(leaving.user_id, error=True)
     assert leaving not in game.players
     assert not leaving.websocket.closed
-    assert game.deck.bounce_deck
+    assert leaving.hand == []
+    assert len(game.deck.deck) == initial_deck_size + 1
+    assert returned_card in game.deck.deck
+    assert shuffled and returned_card in shuffled[0]
+    assert recipient.options.must_draw == 2
+    assert recipient.options.must_skip
+    assert game.get_current_player() is recipient
     assert game.game_id in manager.games
 
     await handler.handle_disconnect_game(third.user_id)
     assert not game.is_active
     assert game.game_id not in manager.games
     assert game.players[0].websocket.closed
+
+
+@pytest.mark.anyio
+async def test_host_disconnect_ends_game(game):
+    manager, handler = setup_manager(game)
+    host = game.get_player_or_none(game.host_id)
+
+    await handler.handle_disconnect_game(host.user_id, error=True)
+
+    assert not game.is_active
+    assert manager.get_game(game.game_id) is None
+    for player in game.players:
+        if player is not host:
+            assert player.websocket.sent[-1]["type"] == "nep"
+
+
+@pytest.mark.anyio
+async def test_explicit_host_leave_uses_immediate_leave_message(game):
+    manager, handler = setup_manager(game)
+    host = game.get_player_or_none(game.host_id)
+    guest = next(player for player in game.players if player is not host)
+
+    await handler.handle_disconnect_game(host.user_id)
+
+    assert manager.get_game(game.game_id) is None
+    assert guest.websocket.sent[-1] == {
+        "type": "nep",
+        "msg": "The host left the game, so you were returned to the home page",
+    }
 
 
 @pytest.mark.anyio

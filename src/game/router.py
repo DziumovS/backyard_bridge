@@ -37,7 +37,21 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
         await websocket.close(code=1008)
         return
 
-    if not game.add_player_websocket(player_id=user_id, websocket=websocket):
+    if auth.intent == "leave":
+        await game_manager.event_handler.handle_disconnect_game(player_id=user_id)
+        await game_manager.connection_manager.disconnect(websocket)
+        return
+
+
+    if auth.intent == "status":
+        await game_manager.connection_manager.send_message(websocket, {
+            "type": "rs",
+            "seconds": game_manager.reconnect_seconds_left(user_id),
+        })
+        await game_manager.connection_manager.disconnect(websocket)
+        return
+
+    if not game_manager.resume_player(game, player, websocket):
         await game_manager.connection_manager.send_message(
             websocket,
             {"type": EventType.SHOW_ERROR.value, "msg": "This player is already connected."},
@@ -45,7 +59,20 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
         await websocket.close(code=1008)
         return
 
-    if not await game.wait_until_all_ready():
+    if game.has_started:
+        current_player = game.get_current_player()
+        await game_manager.send_whose_turn(
+            websocket,
+            "It's your turn!" if current_player.user_id == user_id else f"It's {current_player.user_name}'s turn!",
+            current_player.user_id,
+        )
+        await game_manager.send_game_data(
+            player,
+            current_player.user_id == user_id,
+            game,
+            chosen_suit=game.chosen_suit,
+        )
+    elif not await game.wait_until_all_ready():
         await game_manager.abort_startup(game, websocket)
         return
 
@@ -61,6 +88,10 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
                 )
                 continue
             data = message.model_dump(exclude_none=True)
+
+            if message.type == EventType.LEAVE_GAME.value:
+                await game_manager.event_handler.handle_disconnect_game(player_id=user_id)
+                return
 
             try:
                 if message.type == EventType.GAME_STARTED.value:
@@ -115,6 +146,6 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
                     {"type": EventType.SHOW_ERROR.value, "msg": str(error)},
                 )
 
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, RuntimeError):
         if game.get_player_or_none(user_id=user_id):
-            await game_manager.event_handler.handle_disconnect_game(player_id=user_id, error=True)
+            game_manager.schedule_disconnect(player_id=user_id, websocket=websocket)
