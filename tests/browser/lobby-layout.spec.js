@@ -7,7 +7,7 @@ async function createLobby(page, botCount, { maxPlayers = 4, isPublic = false } 
   await page.getByRole("button", { name: "Create Lobby", exact: true }).click();
   await page.getByRole("button", { name: String(maxPlayers), exact: true }).click();
   await page.getByRole("button", {
-    name: isPublic ? "Public Lobby" : "Private Lobby",
+    name: isPublic ? "Public" : "Private",
     exact: true
   }).click();
   await expect(page.locator(".player-name-row")).toHaveCount(1);
@@ -19,10 +19,149 @@ async function createLobby(page, botCount, { maxPlayers = 4, isPublic = false } 
   }
 }
 
+async function joinConfiguredLobby(page, { hostName, code, isPublic, playerName }) {
+  await page.goto("/");
+  await page.locator("#nameInput").fill(playerName);
+  await page.getByRole("button", { name: "Change name" }).click();
+  await page.getByRole("button", { name: "Join Lobby" }).click();
+  if (isPublic) {
+    const row = page.locator(".available-lobby-row").filter({ hasText: `${hostName}'s lobby` });
+    await expect(row).toBeVisible();
+    await row.click();
+    await row.getByRole("button", { name: `Join ${hostName}'s lobby` }).click();
+  } else {
+    await page.locator("#lobbyInput").fill(code);
+    await page.getByRole("button", { name: "Join", exact: true }).click();
+  }
+  await expect(page.locator(".lobby-summary-name")).toHaveText(`${hostName}'s lobby`);
+}
+
+test("empty lobby browser uses stacked private search and compact refresh control", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Join Lobby" }).click();
+  await expect(page.locator("#availableLobbiesEmpty")).toHaveText("No lobbies are available yet");
+
+  const layout = await page.locator("#lobby-browser-widget .lobby-modal-content").evaluate(content => {
+    const refresh = content.querySelector("#refreshLobbiesButton");
+    const codeInput = content.querySelector("#lobbyInput");
+    const join = content.querySelector("#joinLobbyButton");
+    const nameInput = document.querySelector("#nameInput");
+    const refreshBox = refresh.getBoundingClientRect();
+    const codeBox = codeInput.getBoundingClientRect();
+    const joinBox = join.getBoundingClientRect();
+    const nameBox = nameInput.getBoundingClientRect();
+    return {
+      emptyAlign: getComputedStyle(content.querySelector("#availableLobbiesEmpty")).textAlign,
+      refreshText: refresh.textContent.trim(),
+      refreshIconSize: getComputedStyle(refresh).fontSize,
+      refreshWeight: getComputedStyle(refresh).fontWeight,
+      refreshWidth: refreshBox.width,
+      refreshHeight: refreshBox.height,
+      refreshRadius: getComputedStyle(refresh).borderRadius,
+      refreshBelowInput: refreshBox.top > codeBox.bottom,
+      joinOnInputLine: Math.abs(joinBox.top - codeBox.top) < 2,
+      inputJoinGap: joinBox.left - codeBox.right,
+      codeWidth: codeBox.width,
+      nameWidth: nameBox.width,
+    };
+  });
+  expect(layout.emptyAlign).toBe("left");
+  expect(layout.refreshText).toBe("Refresh");
+  expect(layout.refreshIconSize).toBe("12px");
+  expect(layout.refreshWeight).toBe("400");
+  expect(layout.refreshWidth).toBe(68);
+  expect(layout.refreshHeight).toBe(22);
+  expect(layout.refreshRadius).toBe("12px");
+  expect(layout.refreshBelowInput).toBe(true);
+  expect(layout.joinOnInputLine).toBe(true);
+  expect(layout.inputJoinGap).toBeGreaterThanOrEqual(12);
+  expect(layout.codeWidth).toBeGreaterThan(layout.nameWidth);
+  const mobileInput = page.locator("#lobbyInput");
+  const mobileJoin = page.locator("#joinLobbyButton");
+  const mobileInputWidth = await mobileInput.evaluate(element => element.getBoundingClientRect().width);
+  const mobileJoinLeft = await mobileJoin.evaluate(element => element.getBoundingClientRect().left);
+  await mobileInput.tap();
+  await page.waitForTimeout(250);
+  const mobileFocus = await mobileInput.evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      width: element.getBoundingClientRect().width,
+      outline: style.outlineStyle,
+      shadow: style.boxShadow
+    };
+  });
+  expect(mobileFocus.width).toBeGreaterThan(mobileInputWidth);
+  expect(mobileFocus.outline).toBe("none");
+  expect(mobileFocus.shadow).toContain("255, 165, 0");
+  expect(await mobileJoin.evaluate(element => element.getBoundingClientRect().left)).toBe(mobileJoinLeft);
+  const refresh = page.locator("#refreshLobbiesButton");
+  await refresh.tap();
+  await page.waitForTimeout(20);
+  await expect(refresh).not.toBeFocused();
+  const refreshShadow = await refresh.evaluate(button => getComputedStyle(button).boxShadow);
+  expect(refreshShadow).not.toContain("255, 165, 0");
+  await context.close();
+});
+
+test("desktop private code field grows in place and releases focus after Join", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const page = await context.newPage();
+  await page.goto("/");
+  const homeLayout = await page.locator("#homeLobbyActions").evaluate(actions => {
+    const create = actions.querySelector("#createLobbyButton").getBoundingClientRect();
+    const join = actions.querySelector("#joinPublicLobbyButton").getBoundingClientRect();
+    const quick = actions.querySelector("#quickPlayButton").getBoundingClientRect();
+    return {
+      firstRow: Math.abs(create.top - join.top) < 2,
+      createBeforeJoin: create.left < join.left,
+      quickBelow: quick.top > create.bottom,
+      quickCentered: Math.abs((quick.left + quick.right) / 2 - innerWidth / 2) < 2
+    };
+  });
+  expect(homeLayout).toEqual({
+    firstRow: true,
+    createBeforeJoin: true,
+    quickBelow: true,
+    quickCentered: true
+  });
+  await page.getByRole("button", { name: "Join Lobby" }).click();
+  const input = page.locator("#lobbyInput");
+  const join = page.locator("#joinLobbyButton");
+  const before = await input.evaluate(element => element.getBoundingClientRect().toJSON());
+  const joinLeftBefore = await join.evaluate(element => element.getBoundingClientRect().left);
+  await input.click();
+  await page.waitForTimeout(250);
+  const focused = await input.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      left: box.left,
+      width: box.width,
+      outline: style.outlineStyle,
+      shadow: style.boxShadow
+    };
+  });
+  expect(focused.width).toBeGreaterThan(before.width);
+  expect(focused.outline).toBe("none");
+  expect(focused.shadow).toContain("255, 165, 0");
+  expect(await join.evaluate(element => element.getBoundingClientRect().left)).toBe(joinLeftBefore);
+
+  await input.fill("deadbe");
+  await page.getByRole("button", { name: "Join", exact: true }).click();
+  await expect(input).not.toBeFocused();
+  await context.close();
+});
+
 test("lobby rows share the longest width and align kick controls", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
   const page = await context.newPage();
   await createLobby(page, 3);
+  await expect(page.locator(".host-label")).toHaveCount(1);
+  await expect(page.locator(".host-label")).toHaveText("HOST");
 
   const rows = await page.locator(".player-name-row").evaluateAll(elements =>
     elements.map(element => {
@@ -47,7 +186,7 @@ test("lobby rows share the longest width and align kick controls", async ({ brow
 
   expect(new Set(rows.map(row => row.rowWidth)).size).toBe(1);
   expect(new Set(rows.map(row => row.rowLeft)).size).toBe(1);
-  expect(rows.every(row => row.nameLeft - row.rowLeft >= 7)).toBe(true);
+  expect(rows.every(row => row.nameLeft - row.rowLeft <= 1.5)).toBe(true);
 
   const removableRows = rows.filter(row => row.kickLeft !== null);
   expect(new Set(removableRows.map(row => row.kickLeft)).size).toBe(1);
@@ -70,13 +209,40 @@ test("mobile tap clears Add Bot focus and sticky highlighting", async ({ browser
   });
   const page = await context.newPage();
   await page.goto("/");
+  const homeLayout = await page.locator("#homeLobbyActions").evaluate(actions => {
+    const create = actions.querySelector("#createLobbyButton").getBoundingClientRect();
+    const join = actions.querySelector("#joinPublicLobbyButton").getBoundingClientRect();
+    const quick = actions.querySelector("#quickPlayButton").getBoundingClientRect();
+    const error = document.querySelector(".errorMessage").getBoundingClientRect();
+    return {
+      firstRow: Math.abs(create.top - join.top) < 2,
+      createBeforeJoin: create.left < join.left,
+      quickBelow: quick.top > create.bottom,
+      quickCentered: Math.abs((quick.left + quick.right) / 2 - innerWidth / 2) < 2,
+      errorHeight: error.height
+    };
+  });
+  expect(homeLayout.firstRow).toBe(true);
+  expect(homeLayout.createBeforeJoin).toBe(true);
+  expect(homeLayout.quickBelow).toBe(true);
+  expect(homeLayout.quickCentered).toBe(true);
+  expect(homeLayout.errorHeight).toBeGreaterThanOrEqual(52);
   await page.locator("#nameInput").fill("A");
   await page.getByRole("button", { name: "Change name" }).tap();
   await page.getByRole("button", { name: "Create Lobby", exact: true }).tap();
   const dialog = page.getByRole("dialog", { name: "Create Lobby" });
   await expect(dialog).toBeVisible();
+  const mobileOptions = await dialog.locator(".lobby-type-option").evaluateAll(options =>
+    options.map(option => {
+      const button = option.querySelector("button").getBoundingClientRect();
+      const text = option.querySelector("p").getBoundingClientRect();
+      return { buttonTop: button.top, buttonBottom: button.bottom, textTop: text.top };
+    })
+  );
+  expect(mobileOptions[0].buttonTop).toBeCloseTo(mobileOptions[1].buttonTop, 1);
+  expect(mobileOptions.every(option => option.textTop > option.buttonBottom)).toBe(true);
   await page.getByRole("button", { name: "4", exact: true }).tap();
-  await page.getByRole("button", { name: "Private Lobby", exact: true }).tap();
+  await page.getByRole("button", { name: "Private", exact: true }).tap();
   await expect(page.locator(".player-name-row")).toHaveCount(1);
 
   const addBot = page.getByRole("button", { name: "Add Bot" });
@@ -102,6 +268,130 @@ test("mobile tap clears Add Bot focus and sticky highlighting", async ({ browser
   await context.close();
 });
 
+test("player name backgrounds are limited to the lobby", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await createLobby(page, 1, { maxPlayers: 2 });
+  const lobbyBackground = await page.locator(".player-name-row").first().evaluate(element =>
+    getComputedStyle(element).backgroundColor
+  );
+  expect(lobbyBackground).not.toBe("rgba(0, 0, 0, 0)");
+
+  await page.getByRole("button", { name: "Start Game" }).click();
+  await expect(page.locator("#currentCards")).toBeVisible();
+  const gameRows = await page.locator(".player-name-row").evaluateAll(rows =>
+    rows.map(row => ({
+      background: getComputedStyle(row).backgroundColor,
+      border: getComputedStyle(row).borderTopWidth
+    }))
+  );
+  expect(gameRows.every(row => row.background === "rgba(0, 0, 0, 0)")).toBe(true);
+  expect(gameRows.every(row => row.border === "0px")).toBe(true);
+  await context.close();
+});
+
+test("refreshing an active game offers a timed manual reconnect", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await createLobby(page, 1, { maxPlayers: 2 });
+  await page.getByRole("button", { name: "Start Game" }).click();
+  await expect(page.locator("#playerHand img")).not.toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "Game disconnected" })).toBeVisible();
+  await expect(page.locator("#homeLobbyActions")).toBeVisible();
+  const seconds = Number(await page.locator("#reconnectGameTimer").textContent());
+  expect(seconds).toBeGreaterThan(0);
+  expect(seconds).toBeLessThanOrEqual(60);
+
+  await page.getByRole("button", { name: "Reconnect Game" }).click();
+  await expect(page.locator("#playerHand img")).not.toHaveCount(0);
+  await expect(page.locator("#currentCards")).toBeVisible();
+  await expect(page.locator("#rightCard img")).toHaveCount(1);
+  await expect(page.locator("#cardsLeft")).not.toHaveText("");
+  await expect(page.locator(".opponent_hand")).toHaveCount(2);
+  await expect(page.locator("#welcomeMessage")).toBeHidden();
+  await expect(page.locator("#homeLobbyActions")).toBeHidden();
+  await expect(page.locator("#nameForm")).toBeHidden();
+  await context.close();
+});
+
+test("another tab cannot inherit a game session from this tab", async ({ browser }) => {
+  const context = await browser.newContext();
+  const gamePage = await context.newPage();
+  await createLobby(gamePage, 1, { maxPlayers: 2 });
+  await gamePage.getByRole("button", { name: "Start Game" }).click();
+  await expect(gamePage.locator("#playerHand img")).not.toHaveCount(0);
+
+  const independentTab = await context.newPage();
+  await independentTab.goto("/");
+  await independentTab.reload();
+  await expect(independentTab.locator("#homeLobbyActions")).toBeVisible();
+  await expect(independentTab.getByRole("dialog", { name: "Game disconnected" })).toBeHidden();
+  await expect(independentTab.locator("#currentCards")).toBeHidden();
+  await context.close();
+});
+
+test("host Leave Game ends the active game for every participant", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  await createLobby(host, 0, { maxPlayers: 2, isPublic: true });
+  await guest.goto("/");
+  await guest.getByRole("button", { name: "Join Lobby" }).click();
+  const row = guest.locator(".available-lobby-row");
+  await row.click();
+  await row.getByRole("button", { name: "Join A's lobby" }).click();
+  await host.getByRole("button", { name: "Start Game" }).click();
+  await expect(host.locator("#playerHand img")).not.toHaveCount(0);
+  await expect(guest.locator("#playerHand img")).not.toHaveCount(0);
+
+  await host.locator("#leaveActiveGameButton").click();
+  const confirmation = host.getByRole("dialog", { name: "Are you sure?" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "Continue" }).click();
+  await expect(confirmation).toBeHidden();
+  await expect(host.locator("#playerHand img")).not.toHaveCount(0);
+  await host.locator("#leaveActiveGameButton").click();
+  await confirmation.getByRole("button", { name: "Leave", exact: true }).click();
+  await expect(host.locator("#homeLobbyActions")).toBeVisible();
+  await expect(guest.locator("#homeLobbyActions")).toBeVisible();
+  await expect(guest.locator("#errorMessage")).toContainText("The host left the game");
+  await guestContext.close();
+  await hostContext.close();
+});
+
+test("refreshing the host lobby immediately closes it for every participant", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const observerContext = await browser.newContext();
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  const observer = await observerContext.newPage();
+
+  await createLobby(host, 0, { maxPlayers: 3, isPublic: true });
+  await guest.goto("/");
+  await guest.getByRole("button", { name: "Join Lobby" }).click();
+  const row = guest.locator(".available-lobby-row");
+  await row.click();
+  await row.getByRole("button", { name: "Join A's lobby" }).click();
+  await expect(host.locator(".player-name-row")).toHaveCount(2);
+
+  await host.reload();
+  await expect(host.locator("#homeLobbyActions")).toBeVisible();
+  await expect(guest.locator("#homeLobbyActions")).toBeVisible();
+  await expect(guest.locator("#errorMessage")).toContainText("The host left the lobby");
+  await observer.goto("/");
+  await observer.getByRole("button", { name: "Join Lobby" }).click();
+  await expect(observer.locator("#availableLobbiesEmpty")).toBeVisible();
+  await expect(observer.locator(".available-lobby-row")).toHaveCount(0);
+
+  await observerContext.close();
+  await guestContext.close();
+  await hostContext.close();
+});
+
 test("public lobby is discoverable and joins at the configured capacity", async ({ browser }) => {
   const hostContext = await browser.newContext({ viewport: { width: 1200, height: 800 } });
   const guestContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -113,15 +403,40 @@ test("public lobby is discoverable and joins at the configured capacity", async 
   await host.getByRole("button", { name: "Change name" }).click();
   await host.getByRole("button", { name: "Create Lobby", exact: true }).click();
   await host.getByRole("button", { name: "2", exact: true }).click();
-  await host.getByRole("button", { name: "Public Lobby", exact: true }).click();
+  await host.getByRole("button", { name: "Public", exact: true }).click();
   await expect(host.locator(".lobby-summary-name")).toHaveText("Alice's lobby");
-  await expect(host.locator(".lobby-summary-meta")).toContainText("Public lobby · 2 players");
+  await expect(host.locator(".lobby-summary-meta")).toContainText("Public lobby · 1/2 players");
   await expect(host.locator(".lobby-code-button")).toHaveCount(0);
 
   await guest.goto("/");
-  await guest.getByRole("button", { name: "Refresh" }).click();
-  await expect(guest.locator(".public-lobby-row")).toContainText("Alice's lobby");
-  await expect(guest.locator(".public-lobby-row")).toContainText("1/2 players");
+  await guest.getByRole("button", { name: "Join Lobby" }).click();
+  await expect(guest.locator(".available-lobby-row")).toContainText("Alice's lobby");
+  await expect(guest.locator(".available-lobby-row")).toContainText("1/2");
+  await guest.locator(".available-lobby-row").click();
+  const browserGeometry = await guest.locator("#lobby-browser-widget").evaluate(widget => {
+    const content = widget.querySelector(".lobby-modal-content").getBoundingClientRect();
+    const close = widget.querySelector("#closeLobbyBrowserWidget").getBoundingClientRect();
+    const row = widget.querySelector(".available-lobby-row");
+    const name = row.querySelector(".available-lobby-name").getBoundingClientRect();
+    const capacity = row.querySelector(".available-lobby-capacity").getBoundingClientRect();
+    const closeStyle = getComputedStyle(widget.querySelector("#closeLobbyBrowserWidget"));
+    return {
+      closeTop: close.top - content.top,
+      closeRight: content.right - close.right,
+      closeColor: closeStyle.color,
+      closeShadow: closeStyle.boxShadow,
+      aligned: Math.abs(name.top - capacity.top) < 2,
+      boldText: row.querySelector("strong").textContent,
+      fullNameBold: row.querySelector("strong").textContent === row.querySelector(".available-lobby-name").textContent
+    };
+  });
+  expect(browserGeometry.closeTop).toBeCloseTo(0, 1);
+  expect(browserGeometry.closeRight).toBeCloseTo(0, 1);
+  expect(browserGeometry.closeColor).toBe("rgb(255, 255, 255)");
+  expect(browserGeometry.closeShadow).not.toBe("none");
+  expect(browserGeometry.aligned).toBe(true);
+  expect(browserGeometry.boldText).toBe("Alice");
+  expect(browserGeometry.fullNameBold).toBe(false);
   await guest.getByRole("button", { name: "Join Alice's lobby" }).click();
 
   await expect(guest.locator(".lobby-summary-name")).toHaveText("Alice's lobby");
@@ -133,19 +448,173 @@ test("public lobby is discoverable and joins at the configured capacity", async 
   await hostContext.close();
 });
 
-test("private lobby exposes its code but stays out of public discovery", async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  const page = await context.newPage();
-  await page.goto("/");
-  await page.locator("#nameInput").fill("Bob");
-  await page.getByRole("button", { name: "Change name" }).click();
-  await page.getByRole("button", { name: "Create Lobby", exact: true }).click();
-  await page.getByRole("button", { name: "3", exact: true }).click();
-  await page.getByRole("button", { name: "Private Lobby", exact: true }).click();
+test("open lobby list updates capacity automatically", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  await createLobby(host, 0, { maxPlayers: 4, isPublic: true });
+  await guest.goto("/");
+  await guest.getByRole("button", { name: "Join Lobby" }).click();
+  const row = guest.locator(".available-lobby-row").filter({ hasText: "A's lobby" });
+  await expect(row.locator(".available-lobby-capacity")).toHaveText("1/4");
 
-  await expect(page.locator(".lobby-summary-name")).toHaveText("Bob's lobby");
-  await expect(page.locator(".lobby-summary-meta")).toContainText("Private lobby · 3 players");
-  await expect(page.locator(".lobby-code-button")).toContainText(/Code: [0-9a-f]{6}/);
-  expect(await page.evaluate(() => document.body.scrollWidth > innerWidth)).toBe(false);
-  await context.close();
+  await host.getByRole("button", { name: "Add Bot" }).click();
+  await expect(host.locator(".lobby-summary-meta")).toContainText("2/4 players");
+  await expect(row.locator(".available-lobby-capacity")).toHaveText("2/4", { timeout: 5500 });
+  await guestContext.close();
+  await hostContext.close();
 });
+
+test("private lobby is listed with a lock and joins only after entering its code", async ({ browser }) => {
+  const hostContext = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const guestContext = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
+  });
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  await createLobby(host, 0, { maxPlayers: 2 });
+  const codeText = await host.locator(".lobby-code-button").textContent();
+  const code = codeText.match(/[0-9a-f]{6}/)[0];
+
+  await guest.goto("/");
+  await guest.getByRole("button", { name: "Join Lobby" }).click();
+  const row = guest.locator(".available-lobby-row").filter({ hasText: "A's lobby" });
+  await expect(row.getByRole("img", { name: "Private lobby" })).toBeVisible();
+  await row.click();
+  await row.getByRole("button", { name: "Join A's lobby" }).click();
+  await expect(guest.locator("#lobbyInput")).toBeFocused();
+  await guest.locator("#lobbyInput").fill("deadbe");
+  await guest.getByRole("button", { name: "Join", exact: true }).click();
+  await expect(guest.locator("#lobbyInput")).toHaveValue("");
+  await expect(guest.locator("#lobbyBrowserError")).toContainText("not found");
+  await guest.waitForTimeout(20);
+  const privateFocus = await guest.locator("#lobby-browser-widget").evaluate(widget => {
+    const input = widget.querySelector("#lobbyInput");
+    const join = widget.querySelector("#joinLobbyButton");
+    return {
+      inputFocused: document.activeElement === input,
+      joinFocused: document.activeElement === join,
+      inputShadow: getComputedStyle(input).boxShadow,
+      joinShadow: getComputedStyle(join).boxShadow
+    };
+  });
+  expect(privateFocus.inputFocused).toBe(false);
+  expect(privateFocus.joinFocused).toBe(false);
+  expect(privateFocus.inputShadow).not.toContain("255, 165, 0");
+  expect(privateFocus.joinShadow).not.toContain("255, 165, 0");
+  await expect(guest.locator("#lobbyBrowserError")).toHaveText("", { timeout: 3500 });
+  await guest.locator("#lobbyInput").fill(code);
+  await guest.getByRole("button", { name: "Join", exact: true }).click();
+  await expect(guest.locator(".lobby-summary-name")).toHaveText("A's lobby");
+  expect(await guest.evaluate(() => document.body.scrollWidth > innerWidth)).toBe(false);
+  await guestContext.close();
+  await hostContext.close();
+});
+
+test("Quick Play ignores a full public lobby", async ({ browser }) => {
+  const fullContext = await browser.newContext();
+  const openContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const full = await fullContext.newPage();
+  const open = await openContext.newPage();
+  const guest = await guestContext.newPage();
+  await createLobby(full, 1, { maxPlayers: 2, isPublic: true });
+  await createLobby(open, 0, { maxPlayers: 3, isPublic: true });
+
+  await guest.goto("/");
+  await guest.getByRole("button", { name: "Quick Play" }).click();
+  await expect(guest.locator(".lobby-summary-name")).toHaveText("A's lobby");
+  await expect(open.locator(".player-name-row")).toHaveCount(2);
+  await expect(full.locator(".player-name-row")).toHaveCount(2);
+  await guestContext.close();
+  await openContext.close();
+  await fullContext.close();
+});
+
+for (const isPublic of [true, false]) {
+  for (const playerCount of [2, 3, 4]) {
+    test(`${isPublic ? "public" : "private"} ${playerCount}-player session works with active clients`, async ({ browser }) => {
+      test.setTimeout(45_000);
+      const contexts = [];
+      try {
+        const hostContext = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+        contexts.push(hostContext);
+        const host = await hostContext.newPage();
+        const hostName = `H${playerCount}${isPublic ? "Pub" : "Priv"}`;
+        await host.goto("/");
+        await host.locator("#nameInput").fill(hostName);
+        await host.getByRole("button", { name: "Change name" }).click();
+        await host.getByRole("button", { name: "Create Lobby", exact: true }).click();
+        await host.getByRole("button", { name: String(playerCount), exact: true }).click();
+        await host.getByRole("button", {
+          name: isPublic ? "Public" : "Private", exact: true
+        }).click();
+
+        await expect(host.getByRole("button", { name: "Start Game" })).toBeDisabled();
+        await expect(host.getByRole("button", { name: "Add Bot" })).toBeEnabled();
+        await expect(host.getByRole("button", { name: "Leave Lobby" })).toBeVisible();
+        const codeText = isPublic ? "" : await host.locator(".lobby-code-button").textContent();
+        const code = isPublic ? "" : codeText.match(/[0-9a-f]{6}/)[0];
+        const participants = [host];
+
+        for (let index = 1; index < playerCount; index += 1) {
+          const context = await browser.newContext({
+            viewport: index % 2 ? { width: 390, height: 844 } : { width: 1200, height: 800 },
+            hasTouch: index % 2 === 1,
+            isMobile: index % 2 === 1
+          });
+          contexts.push(context);
+          const participant = await context.newPage();
+          await joinConfiguredLobby(participant, {
+            hostName, code, isPublic, playerName: `P${playerCount}${index}`
+          });
+          participants.push(participant);
+          await expect(host.locator(".player-name-row")).toHaveCount(index + 1);
+          await expect(host.locator(".lobby-summary-meta")).toContainText(
+            `${index + 1}/${playerCount} players`
+          );
+        }
+
+        await expect(host.getByRole("button", { name: "Start Game" })).toBeEnabled();
+        await expect(host.getByRole("button", { name: "Add Bot" })).toBeDisabled();
+        await expect(host.locator(".kick-player-button")).toHaveCount(playerCount - 1);
+
+        const kicked = participants.at(-1);
+        await host.locator(".kick-player-button").last().click();
+        await expect(kicked.locator("#homeLobbyActions")).toBeVisible();
+        await expect(kicked.locator("#errorMessage")).toContainText("removed you from the lobby");
+        await joinConfiguredLobby(kicked, {
+          hostName, code, isPublic, playerName: `P${playerCount}${playerCount - 1}`
+        });
+        await expect(host.locator(".player-name-row")).toHaveCount(playerCount);
+
+        await host.getByRole("button", { name: "Start Game" }).click();
+        for (const participant of participants) {
+          await expect(participant.locator("#playerHand img")).not.toHaveCount(0);
+          await expect(participant.locator("#currentCards")).toBeVisible();
+          await expect(participant.locator("#leaveActiveGameButton")).toBeVisible();
+          await expect(participant.locator("#usersList > *")).toHaveCount(playerCount);
+          await expect(participant.locator(".kick-player-button")).toHaveCount(0);
+        }
+
+        await host.getByRole("button", { name: "Rules" }).click();
+        await expect(host.locator("#rules-widget")).toBeVisible();
+        await host.locator("#closeRulesWidget").click();
+        await expect(host.locator("#rules-widget")).toBeHidden();
+        await host.locator("#leaveActiveGameButton").click();
+        const confirmation = host.getByRole("dialog", { name: "Are you sure?" });
+        await confirmation.getByRole("button", { name: "Continue" }).click();
+        await expect(host.locator("#playerHand img")).not.toHaveCount(0);
+        await host.locator("#leaveActiveGameButton").click();
+        await confirmation.getByRole("button", { name: "Leave", exact: true }).click();
+        for (const participant of participants) {
+          await expect(participant.locator("#homeLobbyActions")).toBeVisible();
+          await expect(participant.locator("#playerHand img")).toHaveCount(0);
+        }
+      } finally {
+        await Promise.all(contexts.map(context => context.close()));
+      }
+    });
+  }
+}

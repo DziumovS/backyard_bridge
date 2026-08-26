@@ -15,7 +15,9 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
     env: {
-      BACKYARD_BRIDGE_BOT_ACTION_DELAY: "0"
+      BACKYARD_BRIDGE_BOT_ACTION_DELAY: "0",
+      BACKYARD_BRIDGE_RECONNECT_GRACE_SECONDS: "5",
+      BACKYARD_BRIDGE_DEV_ASSETS: "1"
     }
   }
 });
