@@ -8,6 +8,7 @@ let currentPlayer = "";
 let eventHandlersAdded = false;
 let game_over = false;
 let errorTimeout;
+let lobbyBrowserErrorTimeout;
 let loadingTimeout;
 let loadingFailureTimeout;
 let scoresRateAnimationTimeout;
@@ -16,6 +17,20 @@ let cardImagesReady = Promise.resolve();
 let lobbyCapabilities = new Set();
 let lobbyMaxPlayers = 4;
 let selectedLobbySize = 4;
+let lobbyIsPublic = false;
+let lobbyPlayerCount = 0;
+let lobbyRefreshInterval;
+let selectedLobbyKey = "";
+let privateJoinPending = false;
+let currentPhase = "home";
+let reconnectDeadline = 0;
+let reconnectTimer;
+let reconnectCountdownInterval;
+let reconnecting = false;
+let reconnectRequested = false;
+let leavingGame = false;
+const reconnectWindowMs = 60000;
+const storedSessionKey = "backyardBridgeSession";
 
 
 const elements = {
@@ -28,11 +43,15 @@ const elements = {
     createPublicLobbyButton: document.getElementById("createPublicLobbyButton"),
     createPrivateLobbyButton: document.getElementById("createPrivateLobbyButton"),
     playerCountButtons: document.querySelectorAll("[data-player-count]"),
-    publicLobbiesPanel: document.getElementById("publicLobbiesPanel"),
-    publicLobbiesList: document.getElementById("publicLobbiesList"),
+    homeLobbyActions: document.getElementById("homeLobbyActions"),
+    joinPublicLobbyButton: document.getElementById("joinPublicLobbyButton"),
+    quickPlayButton: document.getElementById("quickPlayButton"),
+    lobbyBrowserWidget: document.getElementById("lobby-browser-widget"),
+    closeLobbyBrowserWidget: document.getElementById("closeLobbyBrowserWidget"),
+    availableLobbiesList: document.getElementById("availableLobbiesList"),
+    availableLobbiesEmpty: document.getElementById("availableLobbiesEmpty"),
     refreshLobbiesButton: document.getElementById("refreshLobbiesButton"),
-    privateLobbyLabel: document.querySelector(".private-lobby-label"),
-    joinLobbyControls: document.querySelector(".joinLobbyControls"),
+    lobbyBrowserError: document.getElementById("lobbyBrowserError"),
     joinLobbyInput: document.getElementById("lobbyInput"),
     joinLobbyButton: document.getElementById("joinLobbyButton"),
     startButton: document.getElementById("startButton"),
@@ -61,6 +80,14 @@ const elements = {
     rulesButton: document.getElementById("rulesButton"),
     continueGameButton: document.getElementById("continueGameButton"),
     leaveGameButton: document.getElementById("leaveGameButton"),
+    leaveActiveGameButton: document.getElementById("leaveActiveGameButton"),
+    reconnectGameWidget: document.getElementById("reconnect-game-widget"),
+    reconnectGameTimer: document.getElementById("reconnectGameTimer"),
+    reconnectGameButton: document.getElementById("reconnectGameButton"),
+    leaveDisconnectedGameButton: document.getElementById("leaveDisconnectedGameButton"),
+    leaveGameConfirmWidget: document.getElementById("leave-game-confirm-widget"),
+    confirmLeaveGameButton: document.getElementById("confirmLeaveGameButton"),
+    continueActiveGameButton: document.getElementById("continueActiveGameButton"),
 };
 
 
@@ -69,7 +96,7 @@ elements.nameInput.placeholder = userName;
 
 
 elements.joinLobbyInput.addEventListener("input", function () {
-    elements.joinLobbyButton.disabled = !elements.joinLobbyInput.value.trim();
+    elements.joinLobbyButton.disabled = !/^[0-9a-f]{6}$/i.test(elements.joinLobbyInput.value.trim());
 });
 
 elements.nameInput.addEventListener("input", function () {
@@ -80,6 +107,8 @@ elements.nameInput.addEventListener("input", function () {
 elements.nameForm.addEventListener("submit", updateUsername);
 elements.rulesButton.addEventListener("click", showRulesWidget);
 elements.joinLobbyButton.addEventListener("click", joinLobby);
+elements.joinPublicLobbyButton.addEventListener("click", openLobbyBrowser);
+elements.quickPlayButton.addEventListener("click", quickPlay);
 elements.createLobbyButton.addEventListener("click", openCreateLobbyWidget);
 elements.closeCreateLobbyWidget.addEventListener("click", closeCreateLobbyWidget);
 elements.createPublicLobbyButton.addEventListener("click", () => createLobby(true));
@@ -90,17 +119,39 @@ elements.playerCountButtons.forEach(button => {
 elements.createLobbyWidget.addEventListener("click", event => {
     if (event.target === elements.createLobbyWidget) closeCreateLobbyWidget();
 });
-elements.refreshLobbiesButton.addEventListener("click", refreshPublicLobbies);
+elements.closeLobbyBrowserWidget.addEventListener("click", closeLobbyBrowser);
+elements.lobbyBrowserWidget.addEventListener("click", event => {
+    if (event.target === elements.lobbyBrowserWidget) closeLobbyBrowser();
+});
+elements.refreshLobbiesButton.addEventListener("click", refreshAvailableLobbies);
 elements.startButton.addEventListener("click", startGame);
 elements.addBotButton.addEventListener("click", addBot);
 elements.leaveLobbyButton.addEventListener("click", leaveLobby);
 elements.continueGameButton.addEventListener("click", startNewGame);
 elements.leaveGameButton.addEventListener("click", leaveGameFromWidget);
+elements.leaveActiveGameButton.addEventListener("click", showLeaveGameConfirmation);
+elements.reconnectGameButton.addEventListener("click", reconnectGame);
+elements.leaveDisconnectedGameButton.addEventListener("click", leaveDisconnectedGame);
+elements.confirmLeaveGameButton.addEventListener("click", confirmLeaveActiveGame);
+elements.continueActiveGameButton.addEventListener("click", closeLeaveGameConfirmation);
+elements.leaveGameConfirmWidget.addEventListener("click", event => {
+    if (event.target === elements.leaveGameConfirmWidget) closeLeaveGameConfirmation();
+});
 document.addEventListener("keydown", event => {
-    if (event.key === "Escape") closeCreateLobbyWidget();
+    if (event.key === "Escape") {
+        closeCreateLobbyWidget();
+        closeLobbyBrowser();
+        closeLeaveGameConfirmation();
+    }
 });
 
-void refreshPublicLobbies();
+window.addEventListener("pagehide", () => {
+    if (currentPhase === "game" && !leavingGame) {
+        markGameDisconnected();
+    }
+});
+
+restoreStoredSession();
 
 
 function getWsBaseUrl(path) {
@@ -114,8 +165,158 @@ function getHttpBaseUrl(path = "") {
 }
 
 
+function storeSession() {
+    if (currentPhase !== "game" || !sessionToken || !lobbyId) return;
+    sessionStorage.setItem(storedSessionKey, JSON.stringify({
+        userId, userName, sessionToken, lobbyId, isHost, phase: currentPhase, reconnectDeadline,
+    }));
+}
+
+
+function clearStoredSession() {
+    sessionStorage.removeItem(storedSessionKey);
+    currentPhase = "home";
+    reconnectDeadline = 0;
+    reconnecting = false;
+    reconnectRequested = false;
+    leavingGame = false;
+    clearTimeout(reconnectTimer);
+    clearInterval(reconnectCountdownInterval);
+}
+
+
+function readStoredSession() {
+    try {
+        return JSON.parse(sessionStorage.getItem(storedSessionKey));
+    } catch {
+        sessionStorage.removeItem(storedSessionKey);
+        return null;
+    }
+}
+
+
+function scheduleReconnect(phase) {
+    if (phase !== "game" || currentPhase !== "game" || !reconnectRequested) return;
+    if (!reconnectDeadline) reconnectDeadline = Date.now() + reconnectWindowMs;
+    if (Date.now() >= reconnectDeadline) {
+        clearStoredSession();
+        returnToMainPage();
+        void showError("Unable to reconnect within 60 seconds.", 5);
+        return;
+    }
+    reconnecting = true;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+        connectGameWebSocket(true);
+    }, 1000);
+}
+
+
+function restoreStoredSession() {
+    const stored = readStoredSession();
+    if (!stored?.userId || !stored?.sessionToken || !stored?.lobbyId) return false;
+    ({ userId, userName, sessionToken, lobbyId, isHost } = stored);
+    if (stored.phase !== "game") {
+        clearStoredSession();
+        return false;
+    }
+    currentPhase = "game";
+    reconnectDeadline = Number(stored.reconnectDeadline) || Date.now() + reconnectWindowMs;
+    elements.wsId.textContent = userName;
+    elements.nameInput.placeholder = userName;
+    reconnecting = false;
+    showReconnectGameWidget();
+    return true;
+}
+
+
+function markGameDisconnected() {
+    if (!reconnectDeadline) reconnectDeadline = Date.now() + reconnectWindowMs;
+    storeSession();
+}
+
+
+function updateReconnectCountdown() {
+    const seconds = Math.max(0, Math.ceil((reconnectDeadline - Date.now()) / 1000));
+    elements.reconnectGameTimer.textContent = String(seconds);
+    if (seconds === 0) {
+        elements.reconnectGameWidget.style.display = "none";
+        clearStoredSession();
+        returnToMainPage();
+        void showError("The reconnect time has expired", 4);
+    }
+}
+
+
+function syncReconnectDeadline() {
+    const statusSocket = new WebSocket(getWsBaseUrl(`/ws/game/${lobbyId}/${userId}`));
+    statusSocket.onopen = () => statusSocket.send(JSON.stringify({
+        type: "auth", token: sessionToken, intent: "status",
+    }));
+    statusSocket.onmessage = event => {
+        const data = JSON.parse(event.data);
+        if (data.type === "se") {
+            closeReconnectGameWidget();
+            clearStoredSession();
+            returnToMainPage();
+            void showError("The game is no longer available", 4);
+            return;
+        }
+        if (data.type !== "rs" || !Number.isFinite(data.seconds)) return;
+        reconnectDeadline = Date.now() + Math.max(0, data.seconds * 1000);
+        storeSession();
+        updateReconnectCountdown();
+    };
+}
+
+
+function showReconnectGameWidget() {
+    markGameDisconnected();
+    returnToMainPage(true);
+    elements.reconnectGameWidget.style.display = "flex";
+    updateReconnectCountdown();
+    clearInterval(reconnectCountdownInterval);
+    reconnectCountdownInterval = setInterval(updateReconnectCountdown, 250);
+    syncReconnectDeadline();
+}
+
+
+function closeReconnectGameWidget() {
+    elements.reconnectGameWidget.style.display = "none";
+    clearInterval(reconnectCountdownInterval);
+    reconnectCountdownInterval = undefined;
+}
+
+
+function reconnectGame() {
+    if (Date.now() >= reconnectDeadline) {
+        updateReconnectCountdown();
+        return;
+    }
+    reconnectRequested = true;
+    reconnecting = true;
+    closeReconnectGameWidget();
+    setGameUI();
+    connectGameWebSocket(true);
+}
+
+
+function leaveDisconnectedGame() {
+    const leaveSocket = new WebSocket(getWsBaseUrl(`/ws/game/${lobbyId}/${userId}`));
+    leaveSocket.onopen = () => leaveSocket.send(JSON.stringify({
+        type: "auth", token: sessionToken, intent: "leave",
+    }));
+    leavingGame = true;
+    closeReconnectGameWidget();
+    clearStoredSession();
+    returnToMainPage();
+}
+
+
 function leaveGameFromWidget() {
-    return backToHomePage("Thanks for playing! Bye!", 0.3);
+    closeGameOverWidget();
+    performLeaveActiveGame();
+    return showError("Thanks for playing! Bye!", 0.3);
 }
 
 
@@ -136,11 +337,8 @@ function updateUsername(event) {
 function setLobbyUI(isHostView) {
     elements.wsId.style.display = "block";
     elements.welcomeMessage.style.display = "none";
-    elements.createLobbyButton.style.display = "none";
+    elements.homeLobbyActions.style.display = "none";
     elements.nameForm.style.display = "none";
-    elements.joinLobbyControls.style.display = "none";
-    elements.privateLobbyLabel.style.display = "none";
-    elements.publicLobbiesPanel.style.display = "none";
     elements.lobbyControls.style.display = "block";
     elements.usersHeader.classList.add("lobby-users-header");
     elements.leaveLobbyButton.style.display = "inline";
@@ -175,7 +373,6 @@ function selectLobbySize(size) {
 function createLobby(isPublic = false) {
     closeCreateLobbyWidget();
     startLoadingAnimation(0.3, 0.8);
-    setLobbyUI(true);
     initializeWebSocket("crl", {
         user_name: userName,
         is_public: isPublic,
@@ -209,31 +406,55 @@ function preloadCardImages() {
 
 
 async function joinLobby() {
-    const inputLobbyId = elements.joinLobbyInput.value.trim();
+    const inputLobbyId = elements.joinLobbyInput.value.trim().toLowerCase();
     if (!inputLobbyId) return;
 
-    await joinLobbyById(inputLobbyId);
+    elements.joinLobbyInput.value = "";
+    elements.joinLobbyButton.disabled = true;
+    elements.joinLobbyInput.blur();
+    elements.joinLobbyButton.blur();
+    await joinLobbyById(inputLobbyId, true);
 }
 
 
-async function joinLobbyById(inputLobbyId) {
+async function joinLobbyById(inputLobbyId, privateOnly = false) {
+    privateJoinPending = privateOnly;
+    clearTimeout(lobbyBrowserErrorTimeout);
+    elements.lobbyBrowserError.textContent = "";
+    startLoadingAnimation(0.4, 0.9);
+    initializeWebSocket("jl", {
+        user_name: userName,
+        lobby_id: inputLobbyId,
+        private_only: privateOnly,
+    });
+}
 
-    const response = await fetch(`/check_lobby/${inputLobbyId}`);
-    const data = await response.json();
 
-    if (data.exists) {
-        startLoadingAnimation(0.4, 0.9);
-        setLobbyUI(false);
-        initializeWebSocket("jl", { user_name: userName, lobby_id: inputLobbyId });
-    } else {
-        await showError(data.msg, 2);
-    }
+function openLobbyBrowser() {
+    selectedLobbyKey = "";
+    clearTimeout(lobbyBrowserErrorTimeout);
+    elements.lobbyBrowserError.textContent = "";
+    elements.joinLobbyInput.value = "";
+    elements.joinLobbyButton.disabled = true;
+    elements.lobbyBrowserWidget.style.display = "flex";
+    void refreshAvailableLobbies();
+    startLobbyAutoRefresh();
+}
+
+
+function closeLobbyBrowser() {
+    clearTimeout(lobbyBrowserErrorTimeout);
+    elements.lobbyBrowserWidget.style.display = "none";
+    elements.lobbyBrowserError.textContent = "";
+    stopLobbyAutoRefresh();
 }
 
 
 function renderLobbyDetails(data) {
     lobbyId = data.lobby_id;
     lobbyMaxPlayers = data.max_players || 4;
+    lobbyIsPublic = data.is_public;
+    lobbyPlayerCount = data.users?.length || 1;
     elements.lobbyMessage.replaceChildren();
 
     const name = document.createElement("p");
@@ -243,20 +464,21 @@ function renderLobbyDetails(data) {
 
     const meta = document.createElement("p");
     meta.className = "lobby-summary-meta";
-    meta.textContent = `${data.is_public ? "Public" : "Private"} lobby · ${lobbyMaxPlayers} players`;
+    meta.id = "lobbySummaryMeta";
     elements.lobbyMessage.appendChild(meta);
+    updateLobbySummaryCapacity(lobbyPlayerCount);
 
     if (!data.is_public) {
         const codeButton = document.createElement("button");
         const lobbyCode = lobbyId;
         codeButton.type = "button";
         codeButton.className = "lobby-code-button";
-        codeButton.textContent = `Code: ${lobbyCode} · tap to copy`;
+        codeButton.textContent = `Invite code: ${lobbyCode} · tap to copy`;
         codeButton.addEventListener("click", () => {
             navigator.clipboard.writeText(lobbyCode);
             codeButton.textContent = `Code copied: ${lobbyCode}`;
             setTimeout(() => {
-                codeButton.textContent = `Code: ${lobbyCode} · tap to copy`;
+                codeButton.textContent = `Invite code: ${lobbyCode} · tap to copy`;
             }, 2000);
         });
         elements.lobbyMessage.appendChild(codeButton);
@@ -264,57 +486,138 @@ function renderLobbyDetails(data) {
 }
 
 
-function renderPublicLobbies(lobbies) {
-    elements.publicLobbiesList.replaceChildren();
+function updateLobbySummaryCapacity(playerCount) {
+    lobbyPlayerCount = playerCount;
+    const meta = document.getElementById("lobbySummaryMeta");
+    if (meta) {
+        meta.textContent = `${lobbyIsPublic ? "Public" : "Private"} lobby · ${playerCount}/${lobbyMaxPlayers} players`;
+    }
+}
+
+
+function renderAvailableLobbies(lobbies) {
+    elements.availableLobbiesList.replaceChildren();
+    elements.availableLobbiesEmpty.hidden = lobbies.length > 0;
     if (!lobbies.length) {
-        const empty = document.createElement("p");
-        empty.className = "public-lobbies-empty";
-        empty.textContent = "No public lobbies are available yet.";
-        elements.publicLobbiesList.appendChild(empty);
         return;
     }
 
     lobbies.forEach(lobby => {
+        const lobbyKey = lobby.lobby_id || `private:${lobby.name}`;
         const row = document.createElement("div");
-        row.className = "public-lobby-row";
+        row.className = "available-lobby-row";
+        row.classList.toggle("selected", selectedLobbyKey === lobbyKey);
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.setAttribute("aria-label", `Select ${lobby.name}`);
 
         const details = document.createElement("div");
-        details.className = "public-lobby-details";
+        details.className = "available-lobby-details";
         const name = document.createElement("p");
-        name.className = "public-lobby-name";
-        name.textContent = lobby.name;
+        name.className = "available-lobby-name";
+        const suffix = "'s lobby";
+        const hostName = lobby.name.endsWith(suffix) ? lobby.name.slice(0, -suffix.length) : lobby.name;
+        const host = document.createElement("strong");
+        host.textContent = hostName;
+        name.append(host, document.createTextNode(lobby.name.slice(hostName.length)));
         const capacity = document.createElement("p");
-        capacity.className = "public-lobby-capacity";
-        capacity.textContent = `${lobby.players}/${lobby.max_players} players`;
+        capacity.className = "available-lobby-capacity";
+        capacity.textContent = `${lobby.players}/${lobby.max_players}`;
         details.append(name, capacity);
 
+        const actions = document.createElement("span");
+        actions.className = "available-lobby-actions";
+        if (lobby.is_private) {
+            const lock = document.createElement("span");
+            lock.className = "private-lobby-lock";
+            lock.textContent = "🔒";
+            lock.setAttribute("role", "img");
+            lock.setAttribute("aria-label", "Private lobby");
+            actions.appendChild(lock);
+        }
         const joinButton = document.createElement("button");
         joinButton.type = "button";
-        joinButton.className = "public-lobby-join-button";
+        joinButton.className = "available-lobby-join-button";
         joinButton.textContent = "Join";
         joinButton.setAttribute("aria-label", `Join ${lobby.name}`);
-        joinButton.addEventListener("click", () => joinLobbyById(lobby.lobby_id));
-        row.append(details, joinButton);
-        elements.publicLobbiesList.appendChild(row);
+        joinButton.addEventListener("click", event => {
+            event.stopPropagation();
+            if (lobby.is_private) {
+                elements.joinLobbyInput.focus();
+            } else {
+                void joinLobbyById(lobby.lobby_id);
+            }
+        });
+        actions.appendChild(joinButton);
+        row.addEventListener("click", () => {
+            selectedLobbyKey = lobbyKey;
+            elements.availableLobbiesList.querySelectorAll(".available-lobby-row")
+                .forEach(item => item.classList.remove("selected"));
+            row.classList.add("selected");
+        });
+        row.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                row.click();
+            }
+        });
+        row.append(details, actions);
+        elements.availableLobbiesList.appendChild(row);
     });
 }
 
 
-async function refreshPublicLobbies() {
+async function refreshAvailableLobbies() {
     elements.refreshLobbiesButton.disabled = true;
     try {
-        const response = await fetch("/public_lobbies");
-        renderPublicLobbies(await response.json());
+        const response = await fetch("/lobbies");
+        renderAvailableLobbies(await response.json());
     } catch {
-        renderPublicLobbies([]);
+        renderAvailableLobbies([]);
     } finally {
         elements.refreshLobbiesButton.disabled = false;
+        setTimeout(() => elements.refreshLobbiesButton.blur(), 0);
     }
 }
 
 
-function initializeWebSocket(type, message) {
+function startLobbyAutoRefresh() {
+    stopLobbyAutoRefresh();
+    lobbyRefreshInterval = setInterval(() => {
+        if (elements.lobbyBrowserWidget.style.display === "flex") {
+            void refreshAvailableLobbies();
+        }
+    }, 4000);
+}
+
+
+function stopLobbyAutoRefresh() {
+    clearInterval(lobbyRefreshInterval);
+    lobbyRefreshInterval = undefined;
+}
+
+
+async function quickPlay() {
+    elements.quickPlayButton.disabled = true;
+    try {
+        const response = await fetch("/quick_play");
+        const lobby = await response.json();
+        if (lobby) {
+            await joinLobbyById(lobby.lobby_id);
+        } else {
+            await showError("No public lobbies are available yet.", 2);
+        }
+    } catch {
+        await showError("Unable to find a public lobby. Please try again.", 2);
+    } finally {
+        elements.quickPlayButton.disabled = false;
+    }
+}
+
+
+function initializeWebSocket(type, message, isReconnect = false) {
     if (ws) {
+        ws.onclose = null;
         ws.close(1000);
     }
 
@@ -323,6 +626,13 @@ function initializeWebSocket(type, message) {
     ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
 
     ws.onmessage = handleWebSocketMessage;
+    ws.onclose = () => {
+        if (currentPhase === "lobby") {
+            clearStoredSession();
+            returnToMainPage();
+        }
+    };
+    reconnecting = isReconnect;
     cardImagesReady = preloadCardImages();
 }
 
@@ -335,13 +645,23 @@ function handleWebSocketMessage(event) {
             userId = data.user_id;
             sessionToken = data.session_token;
             lobbyCapabilities = new Set(data.capabilities || []);
+            reconnectDeadline = 0;
             break;
 
         case "lcr":
+            currentPhase = "lobby";
+            reconnecting = false;
+            setLobbyUI(true);
             renderLobbyDetails(data);
             break;
 
         case "jdl":
+            currentPhase = "lobby";
+            reconnecting = false;
+            privateJoinPending = false;
+            elements.lobbyBrowserWidget.style.display = "none";
+            stopLobbyAutoRefresh();
+            setLobbyUI(data.is_host === true);
             renderLobbyDetails(data);
             updateUsers(data.users, false, data.max_players);
             finishLoadingAnimation();
@@ -357,10 +677,13 @@ function handleWebSocketMessage(event) {
             break;
 
         case "lcl":
+            clearStoredSession();
             returnToMainPage();
+            if (data.msg) showError(data.msg, 5);
             break;
 
         case "kfl":
+            clearStoredSession();
             returnToMainPage();
             showError(data.msg, 3);
             break;
@@ -371,7 +694,12 @@ function handleWebSocketMessage(event) {
 
         case "gd":
             isHost = data.is_host;
-            if (data.players) ensureGamePlayers(data.players);
+            closeReconnectGameWidget();
+            reconnectRequested = false;
+            ensureGamePlayers(data.players);
+            reconnecting = false;
+            reconnectDeadline = 0;
+            storeSession();
             checkScoresRate(data.scores_rate, data.scores_rate_changed === true);
             updatePlayerHand(data.hand, data.current_player, data.playable_cards, "current");
             updateOpponentData(data.players_hands);
@@ -388,12 +716,27 @@ function handleWebSocketMessage(event) {
             break;
 
         case "nep":
+            clearStoredSession();
             backToHomePage(data.msg, 3);
             break;
 
         case "se":
             finishLoadingAnimation();
-            showError(data.msg, 2);
+            if (reconnecting) {
+                if (currentPhase === "game" && data.msg === "This player is already connected.") {
+                    scheduleReconnect("game");
+                    break;
+                }
+                clearStoredSession();
+                returnToMainPage();
+            }
+            if (privateJoinPending) {
+                showLobbyBrowserError("The private lobby was not found");
+                elements.lobbyBrowserWidget.style.display = "flex";
+                privateJoinPending = false;
+            } else {
+                showError(data.msg, 2);
+            }
             break;
 
         case "iib":
@@ -449,10 +792,32 @@ function showError(message, seconds) {
 }
 
 
+function showLobbyBrowserError(message) {
+    clearTimeout(lobbyBrowserErrorTimeout);
+    elements.lobbyBrowserError.textContent = message;
+    lobbyBrowserErrorTimeout = setTimeout(() => {
+        elements.lobbyBrowserError.textContent = "";
+    }, 3000);
+}
+
+
 function startGame() {
     if (isHost) {
         ws.send(JSON.stringify({ type: "sg" }));
     }
+
+    ws.onclose = null;
+    currentPhase = "game";
+    reconnectDeadline = 0;
+    leavingGame = false;
+    storeSession();
+    connectGameWebSocket(false);
+    setGameUI();
+}
+
+
+function connectGameWebSocket(isReconnect = false) {
+    if (ws) ws.onclose = null;
 
     ws = new WebSocket(getWsBaseUrl(`/ws/game/${lobbyId}/${userId}`));
 
@@ -460,20 +825,37 @@ function startGame() {
 
     ws.onopen = async () => {
         ws.send(JSON.stringify({ type: "auth", token: sessionToken }));
-        await cardImagesReady;
-        ws.send(JSON.stringify({ type: "gs" }));
+        if (!isReconnect) {
+            await cardImagesReady;
+            ws.send(JSON.stringify({ type: "gs" }));
+        }
     };
 
     ws.onmessage = function (event) {
         handleWebSocketMessage(event);
     };
-
-    setGameUI();
+    ws.onclose = () => {
+        if (currentPhase === "game" && !leavingGame) {
+            if (reconnectRequested) {
+                scheduleReconnect("game");
+                return;
+            }
+            reconnectRequested = false;
+            reconnecting = false;
+            showReconnectGameWidget();
+        }
+    };
+    reconnecting = isReconnect;
 }
 
 
 function setGameUI() {
     elements.lobbyControls.style.display = "none";
+    elements.welcomeMessage.style.display = "none";
+    elements.homeLobbyActions.style.display = "none";
+    elements.nameForm.style.display = "none";
+    elements.wsId.style.display = "block";
+    elements.leaveActiveGameButton.style.display = "block";
     elements.currentCards.style.display = "flex";
     elements.playerContainer.style.display = "flex";
     elements.nameAndScores.style.flexDirection = "row";
@@ -486,9 +868,10 @@ function setGameUI() {
     elements.usersList.style.fontSize = "12px";
     elements.usersList.style.flexDirection = "row";
     document.querySelectorAll(".kick-player-button").forEach(button => button.remove());
+    document.querySelectorAll(".host-label").forEach(label => label.remove());
 
     const currentPlayerContainer = document.getElementById(userId);
-    currentPlayerContainer.style.display = "none";
+    if (currentPlayerContainer) currentPlayerContainer.style.display = "none";
 
     const opponentScores = document.querySelectorAll('.opponentScores');
     opponentScores.forEach(scores => {
@@ -525,32 +908,73 @@ function leaveGame(playerId) {
 
 
 function leaveLobby() {
+    ws.onclose = null;
     ws.send(JSON.stringify({ type: "cll", lobby_id: lobbyId }));
-
+    clearStoredSession();
     returnToMainPage();
 }
 
 
-function returnToMainPage() {
+function showLeaveGameConfirmation() {
+    if (currentPhase !== "game" || !ws) return;
+    elements.leaveGameConfirmWidget.style.display = "flex";
+}
+
+
+function closeLeaveGameConfirmation() {
+    elements.leaveGameConfirmWidget.style.display = "none";
+}
+
+
+function confirmLeaveActiveGame() {
+    closeLeaveGameConfirmation();
+    performLeaveActiveGame();
+}
+
+
+function performLeaveActiveGame() {
+    if (currentPhase !== "game" || !ws) return;
+    leavingGame = true;
+    ws.onclose = null;
+    ws.send(JSON.stringify({ type: "lg" }));
+    clearStoredSession();
+    returnToMainPage();
+}
+
+
+function returnToMainPage(preserveGameSession = false) {
     elements.lobbyControls.style.display = "none";
     elements.welcomeMessage.style.display = "block";
-    elements.createLobbyButton.style.display = "inline";
+    elements.homeLobbyActions.style.display = "grid";
     elements.nameForm.style.display = "none";
-    elements.joinLobbyControls.style.display = "flex";
-    elements.privateLobbyLabel.style.display = "block";
-    elements.publicLobbiesPanel.style.display = "block";
+    elements.lobbyBrowserWidget.style.display = "none";
+    elements.reconnectGameWidget.style.display = "none";
+    elements.leaveGameConfirmWidget.style.display = "none";
+    stopLobbyAutoRefresh();
     elements.joinLobbyInput.value ="";
     elements.joinLobbyButton.style.display = "inline";
     elements.joinLobbyButton.disabled = true;
     elements.leaveLobbyButton.style.display = "none";
     elements.addBotButton.style.display = "none";
+    elements.leaveActiveGameButton.style.display = "none";
     elements.errorMessage.style.display = "none";
     elements.currentCards.style.display = "none";
+    elements.playerContainer.style.display = "none";
+    Array.from(elements.playerHand.children).forEach(clearCardAction);
+    elements.playerHand.replaceChildren();
+    elements.turnText.textContent = "";
+    document.querySelectorAll("body > .card").forEach(card => card.remove());
+    clearCardAction(elements.leftCard);
+    clearCardAction(elements.rightCard);
+    removeHighlighted("#leftCard img");
+    removeHighlighted("#rightCard img");
     elements.usersHeader.style.display = "none";
     elements.usersHeader.classList.remove("lobby-users-header");
     elements.usersList.style.display = "none";
-    isHost = false;
-    void refreshPublicLobbies();
+    if (!preserveGameSession) {
+        isHost = false;
+        currentPhase = "home";
+    }
 }
 
 
@@ -573,6 +997,13 @@ function updateUsers(users, isHostView, maxPlayers = lobbyMaxPlayers) {
         const userElement = document.createElement("p");
         userElement.textContent = user.user_name;
         playerNameRow.appendChild(userElement);
+
+        if (user.is_host) {
+            const hostLabel = document.createElement("span");
+            hostLabel.className = "host-label";
+            hostLabel.textContent = "HOST";
+            playerNameRow.appendChild(hostLabel);
+        }
 
         if (canManageLobby && user.user_id !== userId) {
             const kickButton = document.createElement("button");
@@ -614,8 +1045,9 @@ function updateUsers(users, isHostView, maxPlayers = lobbyMaxPlayers) {
 
     });
 
+    updateLobbySummaryCapacity(users.length);
     if (isHost || isHostView === true) {
-        toggleStartButton(users.length === lobbyMaxPlayers);
+        toggleStartButton(users.length >= 2);
         toggleAddBotButton(users.length < lobbyMaxPlayers);
     }
 }
@@ -1029,7 +1461,7 @@ function setDefaultSkipTurn() {
 
 function removeHighlighted(img) {
     const object = document.querySelector(img);
-    object.classList.remove("highlighted-card-img");
+    if (object) object.classList.remove("highlighted-card-img");
 }
 
 
@@ -1066,8 +1498,8 @@ function closeRulesWidget() {
 
 
 async function backToHomePage(message, seconds) {
+    returnToMainPage();
     await showError(message, seconds);
-    window.location.href = getHttpBaseUrl();
 }
 
 
@@ -1214,13 +1646,20 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         preloadCardImages,
         joinLobby,
         joinLobbyById,
+        openLobbyBrowser,
+        closeLobbyBrowser,
         renderLobbyDetails,
-        renderPublicLobbies,
-        refreshPublicLobbies,
+        renderAvailableLobbies,
+        refreshAvailableLobbies,
+        startLobbyAutoRefresh,
+        stopLobbyAutoRefresh,
+        quickPlay,
         initializeWebSocket,
         handleWebSocketMessage,
         showError,
+        showLobbyBrowserError,
         startGame,
+        connectGameWebSocket,
         setGameUI,
         ensureGamePlayers,
         leaveGame,
@@ -1265,6 +1704,23 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         closeGameOverWidget,
         startLoadingAnimation,
         finishLoadingAnimation,
+        storeSession,
+        clearStoredSession,
+        readStoredSession,
+        scheduleReconnect,
+        restoreStoredSession,
+        markGameDisconnected,
+        updateReconnectCountdown,
+        syncReconnectDeadline,
+        showReconnectGameWidget,
+        closeReconnectGameWidget,
+        reconnectGame,
+        leaveDisconnectedGame,
+        showLeaveGameConfirmation,
+        closeLeaveGameConfirmation,
+        confirmLeaveActiveGame,
+        performLeaveActiveGame,
+        updateLobbySummaryCapacity,
         getState: () => ({
             ws,
             lobbyId,
@@ -1276,6 +1732,13 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             game_over,
             lobbyMaxPlayers,
             selectedLobbySize,
+            currentPhase,
+            reconnectDeadline,
+            reconnecting,
+            reconnectRequested,
+            leavingGame,
+            lobbyIsPublic,
+            lobbyPlayerCount,
             lobbyCapabilities: [...lobbyCapabilities],
         }),
         setState: (state) => {
@@ -1289,6 +1752,13 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             if ("game_over" in state) game_over = state.game_over;
             if ("lobbyMaxPlayers" in state) lobbyMaxPlayers = state.lobbyMaxPlayers;
             if ("selectedLobbySize" in state) selectedLobbySize = state.selectedLobbySize;
+            if ("currentPhase" in state) currentPhase = state.currentPhase;
+            if ("reconnectDeadline" in state) reconnectDeadline = state.reconnectDeadline;
+            if ("reconnecting" in state) reconnecting = state.reconnecting;
+            if ("reconnectRequested" in state) reconnectRequested = state.reconnectRequested;
+            if ("leavingGame" in state) leavingGame = state.leavingGame;
+            if ("lobbyIsPublic" in state) lobbyIsPublic = state.lobbyIsPublic;
+            if ("lobbyPlayerCount" in state) lobbyPlayerCount = state.lobbyPlayerCount;
             if ("lobbyCapabilities" in state) lobbyCapabilities = new Set(state.lobbyCapabilities);
             if ("cardImagesReady" in state) cardImagesReady = state.cardImagesReady;
         }
