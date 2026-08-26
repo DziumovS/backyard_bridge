@@ -26,6 +26,7 @@ class JoinLobbyMessage(Message):
     type: Literal["jl"]
     user_name: Username
     lobby_id: str = Field(pattern=r"^[0-9a-f]{6}$")
+    private_only: bool = False
 
 
 class CloseLobbyMessage(Message):
@@ -65,6 +66,7 @@ class GameStartedMessage(Message):
 class GameAuthMessage(Message):
     type: Literal["auth"]
     token: str = Field(min_length=32, max_length=128)
+    intent: Literal["connect", "leave", "status"] = "connect"
 
 
 game_auth_adapter = TypeAdapter(GameAuthMessage)
@@ -97,6 +99,10 @@ class ResetGameMessage(Message):
     type: Literal["rg"]
 
 
+class LeaveGameMessage(Message):
+    type: Literal["lg"]
+
+
 GameMessage = Annotated[
     GameStartedMessage
     | PlayedCardMessage
@@ -104,7 +110,8 @@ GameMessage = Annotated[
     | SkipTurnMessage
     | ShowMoveMessage
     | GameOverMessage
-    | ResetGameMessage,
+    | ResetGameMessage
+    | LeaveGameMessage,
     Field(discriminator="type"),
 ]
 game_message_adapter = TypeAdapter(GameMessage)

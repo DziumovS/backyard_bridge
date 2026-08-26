@@ -31,6 +31,7 @@ def setup_game(game):
         {"type": "crl", "user_name": ""},
         {"type": "crl", "user_name": "x" * 14},
         {"type": "jl", "user_name": "Name", "lobby_id": "wrong"},
+        {"type": "rl", "user_id": "player", "token": "x" * 32},
         {"type": "sg", "extra": True},
         {"type": "unknown"},
     ],
@@ -67,7 +68,18 @@ def test_protocol_strips_names_and_validates_cards():
         )
     with pytest.raises(ValidationError):
         game_message_adapter.validate_python({"type": "dc", "card": {}})
-    assert game_auth_adapter.validate_python({"type": "auth", "token": "x" * 32}).token == "x" * 32
+    private_join = lobby_message_adapter.validate_python({
+        "type": "jl", "user_name": "Name", "lobby_id": "abcdef", "private_only": True,
+    })
+    assert private_join.private_only is True
+    auth = game_auth_adapter.validate_python({
+        "type": "auth", "token": "x" * 32, "intent": "leave",
+    })
+    assert auth.token == "x" * 32 and auth.intent == "leave"
+    assert game_auth_adapter.validate_python({
+        "type": "auth", "token": "x" * 32, "intent": "status",
+    }).intent == "status"
+    assert game_message_adapter.validate_python({"type": "lg"}).type == "lg"
     with pytest.raises(ValidationError):
         game_auth_adapter.validate_python({"type": "auth", "token": "short"})
 
@@ -96,6 +108,23 @@ async def test_lobby_rejects_full_ingame_and_duplicate_users(users):
 
 
 @pytest.mark.anyio
+async def test_private_code_join_cannot_open_a_public_lobby(users):
+    manager = LobbyManager(ConnectionManager())
+    lobby = Lobby("abcdef", users[0], is_public=True)
+    manager.add_lobby(lobby)
+    guest = User("guest", FakeWebSocket(), "Guest")
+
+    await manager.handlers.handle_join_lobby(
+        guest, guest.websocket, lobby.lobby_id, private_only=True,
+    )
+
+    assert guest.user_id not in lobby.users
+    assert guest.websocket.sent[-1] == {
+        "type": "se", "msg": "The lobby doesn't exist or no slots.",
+    }
+
+
+@pytest.mark.anyio
 async def test_only_host_can_start_valid_lobby(users):
     manager = LobbyManager(ConnectionManager())
     lobby = Lobby("abcdef", users[0], max_players=2)
@@ -107,6 +136,19 @@ async def test_only_host_can_start_valid_lobby(users):
     assert result[0] == lobby.lobby_id
     assert lobby.in_game
     assert await manager.handlers.handle_start_game(users[0].user_id) is None
+
+
+@pytest.mark.anyio
+async def test_host_can_start_with_two_players_below_lobby_capacity(users):
+    manager = LobbyManager(ConnectionManager())
+    lobby = Lobby("abcdef", users[0], max_players=4)
+    manager.add_lobby(lobby)
+    manager.add_user(lobby, users[1])
+
+    result = await manager.handlers.handle_start_game(users[0].user_id)
+
+    assert result[0] == lobby.lobby_id
+    assert len(result[1]) == 2
 
 
 @pytest.mark.anyio
