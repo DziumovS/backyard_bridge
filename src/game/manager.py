@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from fastapi import WebSocket
 
@@ -8,6 +9,7 @@ from src.user.models import Player
 from src.game.models import Game
 from src.game.handlers import EventHandler
 from src.bot.controller import BotController
+from src.config import get_reconnect_grace_seconds
 
 
 class GameManager:
@@ -15,6 +17,9 @@ class GameManager:
         self.connection_manager = manager
         self.games: dict[str, Game] = {}
         self._game_ids_by_player: dict[str, str] = {}
+        self._disconnect_tasks: dict[str, asyncio.Task] = {}
+        self._disconnect_deadlines: dict[str, float] = {}
+        self.reconnect_grace_seconds = get_reconnect_grace_seconds()
         self.event_handler = EventHandler(game_manager_instance=self)
         self.bot_controller = BotController(self)
 
@@ -28,6 +33,7 @@ class GameManager:
         self._game_ids_by_player[player.user_id] = game.game_id
 
     def remove_player(self, game: Game, player: Player) -> None:
+        self.cancel_disconnect(player.user_id)
         current_player_id = game.get_current_player().user_id if game.players else None
         game.remove_player(player)
         self._game_ids_by_player.pop(player.user_id, None)
@@ -51,9 +57,14 @@ class GameManager:
         game = self.games.pop(game_id, None)
         if game:
             for player in game.players:
+                self.cancel_disconnect(player.user_id)
                 self._game_ids_by_player.pop(player.user_id, None)
 
     def clear(self) -> None:
+        for task in self._disconnect_tasks.values():
+            task.cancel()
+        self._disconnect_tasks.clear()
+        self._disconnect_deadlines.clear()
         self.games.clear()
         self._game_ids_by_player.clear()
 
@@ -63,6 +74,47 @@ class GameManager:
     def get_game_by_player_id(self, player_id: str) -> Game | None:
         game_id = self._game_ids_by_player.get(player_id)
         return self.games.get(game_id) if game_id else None
+
+    def cancel_disconnect(self, player_id: str) -> None:
+        task = self._disconnect_tasks.pop(player_id, None)
+        self._disconnect_deadlines.pop(player_id, None)
+        if task:
+            task.cancel()
+
+    def reconnect_seconds_left(self, player_id: str) -> float:
+        deadline = self._disconnect_deadlines.get(player_id)
+        if deadline is None:
+            return self.reconnect_grace_seconds
+        return max(0.0, deadline - time.monotonic())
+
+    def schedule_disconnect(self, player_id: str, websocket: WebSocket) -> bool:
+        game = self.get_game_by_player_id(player_id)
+        player = game.get_player_or_none(player_id) if game else None
+        if player is None or player.websocket is not websocket:
+            return False
+        player.websocket = None
+        self.cancel_disconnect(player_id)
+        self._disconnect_deadlines[player_id] = time.monotonic() + self.reconnect_grace_seconds
+
+        async def expire() -> None:
+            try:
+                await asyncio.sleep(self.reconnect_grace_seconds)
+                self._disconnect_tasks.pop(player_id, None)
+                self._disconnect_deadlines.pop(player_id, None)
+                await self.event_handler.handle_disconnect_game(player_id=player_id, error=True)
+            except asyncio.CancelledError:
+                pass
+
+        self._disconnect_tasks[player_id] = asyncio.create_task(expire())
+        return True
+
+    def resume_player(self, game: Game, player: Player, websocket: WebSocket) -> bool:
+        if player.websocket is not None:
+            return False
+        self.cancel_disconnect(player.user_id)
+        player.websocket = websocket
+        game.check_all_players_connected()
+        return True
 
     async def abort_startup(self, game: Game, websocket: WebSocket) -> None:
         game.is_active = False

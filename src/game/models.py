@@ -38,6 +38,7 @@ class Game:
         self.players = self.shuffle_players(players=players)
         self.host_id = host_id or players[0].user_id
         self.is_active = True
+        self.has_started = False
         self.round_over = False
         self.bridge_pending_for = None
         self.current_player_index = 0
@@ -92,6 +93,7 @@ class Game:
         self.initialized_player_ids.add(player_id)
         if len(self.initialized_player_ids) == len(self.players):
             self.all_initialized_event.set()
+            self.has_started = True
             return True
         return False
 

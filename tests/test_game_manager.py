@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 
 from src.connection.manager import ConnectionManager
 from src.game.manager import GameManager
@@ -83,3 +84,44 @@ async def test_game_manager_aborts_timed_out_startup(game):
     assert websocket.sent == [{"type": "se", "msg": "Game startup timed out. Please try again."}]
     assert websocket.closed
     assert manager.get_game(game.game_id) is None
+
+
+@pytest.mark.anyio
+async def test_game_session_resumes_without_losing_state(game):
+    manager = GameManager(ConnectionManager())
+    manager.reconnect_grace_seconds = 0.01
+    manager.create_game(game)
+    player = game.players[0]
+    original_socket = FakeWebSocket()
+    player.websocket = original_socket
+    original_hand = list(player.hand)
+
+    assert manager.reconnect_seconds_left(player.user_id) == 0.01
+    assert manager.schedule_disconnect(player.user_id, original_socket)
+    assert 0 < manager.reconnect_seconds_left(player.user_id) <= 0.01
+    replacement = FakeWebSocket()
+    assert manager.resume_player(game, player, replacement)
+    assert manager.reconnect_seconds_left(player.user_id) == 0.01
+    await asyncio.sleep(0.02)
+
+    assert player.websocket is replacement
+    assert player.hand == original_hand
+    assert manager.get_game(game.game_id) is game
+
+
+@pytest.mark.anyio
+async def test_game_disconnect_expiry_removes_regular_player(game):
+    manager = GameManager(ConnectionManager())
+    manager.reconnect_grace_seconds = 0
+    manager.create_game(game)
+    player = next(player for player in game.players if player.user_id != game.host_id)
+    socket = FakeWebSocket()
+    player.websocket = socket
+
+    assert not manager.schedule_disconnect("missing", socket)
+    assert manager.schedule_disconnect(player.user_id, socket)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert manager.get_game_by_player_id(player.user_id) is None
+    await manager.send_whose_turn(None, "Turn", player.user_id)
