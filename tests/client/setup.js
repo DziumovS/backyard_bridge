@@ -1,18 +1,25 @@
 import { vi } from "vitest";
 
 document.body.innerHTML = `
-  <header><button id="rulesButton"></button></header>
+  <header><button id="leaveActiveGameButton"></button><button id="rulesButton"></button></header>
   <div id="nameAndScores"><span id="ws-id"></span><form id="nameForm"></form></div>
   <span id="pS"></span><input id="nameInput"><button id="changeName"></button>
-  <button id="createLobbyButton"></button>
+  <div id="homeLobbyActions"><button id="createLobbyButton"></button><button id="quickPlayButton"></button>
+    <button id="joinPublicLobbyButton"></button></div>
   <div id="create-lobby-widget"><button id="closeCreateLobbyWidget"></button>
     <button id="createPublicLobbyButton"></button><button id="createPrivateLobbyButton"></button>
     <button data-player-count="2"></button><button data-player-count="3"></button>
     <button data-player-count="4" class="selected"></button>
   </div>
-  <div id="publicLobbiesPanel"><button id="refreshLobbiesButton"></button><div id="publicLobbiesList"></div></div>
-  <p class="private-lobby-label"></p>
-  <div class="joinLobbyControls"><input id="lobbyInput"><button id="joinLobbyButton"></button></div>
+  <div id="lobby-browser-widget"><button id="closeLobbyBrowserWidget"></button>
+    <p id="availableLobbiesEmpty">No lobbies are available yet</p>
+    <div id="lobbyBrowserError"></div><input id="lobbyInput">
+    <button id="joinLobbyButton"></button><button id="refreshLobbiesButton"></button>
+    <div id="availableLobbiesList"></div></div>
+  <div id="reconnect-game-widget"><span id="reconnectGameTimer"></span>
+    <button id="reconnectGameButton"></button><button id="leaveDisconnectedGameButton"></button></div>
+  <div id="leave-game-confirm-widget"><button id="confirmLeaveGameButton"></button>
+    <button id="continueActiveGameButton"></button></div>
   <button id="startButton"></button><button id="addBotButton"></button><button id="leaveButton"></button>
   <div id="errorMessage"></div><div id="lobbyControls"></div><div id="lobbyMessage"></div>
   <div id="usersHeader"></div><div id="usersList"></div><div id="currentCards"></div>

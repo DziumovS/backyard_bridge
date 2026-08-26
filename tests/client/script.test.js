@@ -51,7 +51,9 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.useRealTimers();
   FakeWebSocket.instances.length = 0;
+  sessionStorage.clear();
   globalThis.fetch.mockReset();
+  globalThis.fetch.mockResolvedValue({ json: async () => [] });
   app.setState({
     ws: null,
     lobbyId: "abcdef",
@@ -63,13 +65,28 @@ beforeEach(() => {
     game_over: false,
     lobbyMaxPlayers: 4,
     selectedLobbySize: 4,
+    currentPhase: "home",
+    reconnectDeadline: 0,
+    reconnecting: false,
+    reconnectRequested: false,
+    leavingGame: false,
+    lobbyIsPublic: false,
+    lobbyPlayerCount: 0,
     lobbyCapabilities: ["kick_users"]
   });
   app.elements.errorMessage.innerHTML = "";
   app.elements.playerHand.innerHTML = "";
   app.elements.usersList.innerHTML = "";
-  app.elements.publicLobbiesList.innerHTML = "";
+    app.elements.availableLobbiesList.innerHTML = "";
+    app.elements.availableLobbiesEmpty.hidden = false;
   app.elements.createLobbyWidget.style.display = "none";
+  app.elements.lobbyControls.style.display = "none";
+  app.elements.homeLobbyActions.style.display = "grid";
+  app.elements.lobbyBrowserWidget.style.display = "none";
+  app.elements.reconnectGameWidget.style.display = "none";
+  app.elements.leaveGameConfirmWidget.style.display = "none";
+  app.elements.currentCards.style.display = "none";
+  app.elements.playerContainer.style.display = "none";
   app.elements.rightCard.innerHTML = '<img src="/right.png">';
   app.elements.leftCard.innerHTML = '<img src="/static/cards/closed_card.png">';
   app.resetScoresRate();
@@ -127,6 +144,8 @@ describe("URLs, identity and lobby", () => {
       type: "crl", user_name: "Me", is_public: true, max_players: 2
     });
     expect(app.elements.createLobbyWidget.style.display).toBe("none");
+    expect(app.getState().isHost).toBe(false);
+    expect(app.elements.lobbyControls.style.display).not.toBe("block");
 
     app.setState({ ws: null });
     app.elements.playerCountButtons[1].click();
@@ -201,15 +220,17 @@ describe("URLs, identity and lobby", () => {
     app.setState({ isHost: true, userId: "me" });
     app.updateUsers(
       [
-        { user_id: "me", user_name: "Me" },
+        { user_id: "me", user_name: "Me", is_host: true },
         { user_id: "other", user_name: "Other" }
       ],
       true
     );
     expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(1);
+    expect(app.elements.usersList.querySelector(".host-label").textContent).toBe("HOST");
     app.setGameUI();
     expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(0);
     expect(app.elements.usersHeader.classList.contains("lobby-users-header")).toBe(false);
+    expect(app.elements.usersList.querySelector(".host-label")).toBeNull();
   });
 
   test("creates, joins and rejects a missing lobby", async () => {
@@ -222,21 +243,10 @@ describe("URLs, identity and lobby", () => {
       type: "crl", user_name: "Me", is_public: false, max_players: 4
     });
 
-    globalThis.fetch
-      .mockResolvedValueOnce({ json: async () => ({ exists: true }) })
-      .mockResolvedValueOnce({ json: async () => [] });
     app.elements.joinLobbyInput.value = "abcdef";
     await app.joinLobby();
     expect(FakeWebSocket.instances.at(-1).url).toContain("/ws/lobby/");
 
-    globalThis.fetch.mockResolvedValueOnce({
-      json: async () => ({ exists: false, msg: "Missing" })
-    });
-    const rejectedJoin = app.joinLobby();
-    await Promise.resolve();
-    await vi.runAllTimersAsync();
-    await rejectedJoin;
-    expect(app.elements.errorMessage.style.display).toBe("none");
     app.elements.joinLobbyInput.value = "";
     await app.joinLobby();
   });
@@ -261,6 +271,7 @@ describe("URLs, identity and lobby", () => {
     await vi.runAllTimersAsync();
     expect(codeButton.textContent).toContain("tap to copy");
     expect(app.getState().lobbyMaxPlayers).toBe(3);
+    expect(document.getElementById("lobbySummaryMeta").textContent).toContain("1/3 players");
 
     app.renderLobbyDetails({
       lobby_id: "fedcba",
@@ -278,29 +289,340 @@ describe("URLs, identity and lobby", () => {
     expect(app.getState().lobbyMaxPlayers).toBe(4);
   });
 
-  test("lists public lobbies, joins one, and handles an empty refresh", async () => {
+  test("lists public and private lobbies, reveals Join after selection, and refreshes", async () => {
     globalThis.fetch
       .mockResolvedValueOnce({ json: async () => [{
-        lobby_id: "abc123", name: "Alice's lobby", players: 1, max_players: 3
+        lobby_id: "abc123", name: "Alice's lobby", players: 1, max_players: 3,
+        is_private: false
+      }, {
+        name: "Bob's lobby", players: 2, max_players: 4, is_private: true
       }] })
-      .mockResolvedValueOnce({ json: async () => ({ exists: true }) })
       .mockResolvedValueOnce({ json: async () => [] });
 
-    await app.refreshPublicLobbies();
-    expect(app.elements.publicLobbiesList.textContent).toContain("Alice's lobby");
-    expect(app.elements.publicLobbiesList.textContent).toContain("1/3 players");
-    app.elements.publicLobbiesList.querySelector(".public-lobby-join-button").click();
+    await app.refreshAvailableLobbies();
+    expect(app.elements.availableLobbiesList.textContent).toContain("Alice's lobby");
+    expect(app.elements.availableLobbiesEmpty.hidden).toBe(true);
+    expect(app.elements.availableLobbiesList.textContent).toContain("1/3");
+    expect(app.elements.availableLobbiesList.textContent).toContain("🔒");
+    expect(app.elements.availableLobbiesList.querySelector("strong").textContent).toBe("Alice");
+    const publicRow = app.elements.availableLobbiesList.querySelector(".available-lobby-row");
+    expect(publicRow.querySelector(".available-lobby-join-button").style.display).toBe("");
+    publicRow.click();
+    expect(publicRow.classList.contains("selected")).toBe(true);
+    publicRow.querySelector(".available-lobby-join-button").click();
     await Promise.resolve();
     await Promise.resolve();
     expect(FakeWebSocket.instances.at(-1).url).toContain("/ws/lobby/");
 
     globalThis.fetch.mockResolvedValueOnce({ json: async () => [] });
-    await app.refreshPublicLobbies();
-    expect(app.elements.publicLobbiesList.textContent).toContain("No public lobbies");
+    await app.refreshAvailableLobbies();
+    expect(app.elements.availableLobbiesEmpty.textContent).toBe("No lobbies are available yet");
+    expect(app.elements.availableLobbiesEmpty.hidden).toBe(false);
 
     globalThis.fetch.mockRejectedValueOnce(new Error("offline"));
-    await app.refreshPublicLobbies();
+    await app.refreshAvailableLobbies();
     expect(app.elements.refreshLobbiesButton.disabled).toBe(false);
+  });
+
+  test("joins a private code from the unified lobby browser and reports a wrong code", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch.mockResolvedValueOnce({ json: async () => [] });
+    app.openLobbyBrowser();
+    await Promise.resolve();
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("flex");
+
+    app.elements.joinLobbyInput.value = "deadbe";
+    app.elements.joinLobbyInput.dispatchEvent(new Event("input"));
+    app.elements.joinLobbyInput.focus();
+    await app.joinLobby();
+    expect(document.activeElement).not.toBe(app.elements.joinLobbyInput);
+    expect(app.elements.joinLobbyInput.value).toBe("");
+    expect(app.elements.joinLobbyButton.disabled).toBe(true);
+    const socket = FakeWebSocket.instances.at(-1);
+    socket.onopen();
+    expect(socket.sent[0]).toMatchObject({ lobby_id: "deadbe", private_only: true });
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or no slots." })
+    });
+    expect(app.elements.lobbyBrowserError.textContent).toBe("The private lobby was not found");
+    expect(app.elements.lobbyControls.style.display).not.toBe("block");
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(app.elements.lobbyBrowserError.textContent).toBe("The private lobby was not found");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(app.elements.lobbyBrowserError.textContent).toBe("");
+
+    app.closeLobbyBrowser();
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("none");
+    vi.useRealTimers();
+  });
+
+  test("shows a global error when a listed public lobby disappears", async () => {
+    vi.useFakeTimers();
+    await app.joinLobbyById("deadbe");
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or no slots." })
+    });
+    await vi.runAllTimersAsync();
+    expect(app.elements.errorMessage.style.display).toBe("none");
+  });
+
+  test("supports lobby modal closing, keyboard selection, and private code focus", async () => {
+    globalThis.fetch.mockResolvedValue({ json: async () => [] });
+    app.elements.joinPublicLobbyButton.click();
+    await Promise.resolve();
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("flex");
+    app.elements.closeLobbyBrowserWidget.click();
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("none");
+    app.openLobbyBrowser();
+    app.elements.lobbyBrowserWidget.click();
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("none");
+
+    app.renderAvailableLobbies([
+      { name: "Private", players: 1, max_players: 4, is_private: true },
+      { lobby_id: "public", name: "Public", players: 1, max_players: 4, is_private: false }
+    ]);
+    app.elements.lobbyBrowserWidget.style.display = "flex";
+    const rows = app.elements.availableLobbiesList.querySelectorAll(".available-lobby-row");
+    rows[0].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(rows[0].classList.contains("selected")).toBe(true);
+    rows[1].dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    expect(rows[1].classList.contains("selected")).toBe(true);
+    rows[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    rows[0].querySelector(".available-lobby-join-button").click();
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("flex");
+    expect(document.activeElement).toBe(app.elements.joinLobbyInput);
+  });
+
+  test("refreshes an open lobby list every four seconds and stops when closed", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch.mockResolvedValue({ json: async () => [] });
+    app.openLobbyBrowser();
+    await Promise.resolve();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    app.closeLobbyBrowser();
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+
+    app.startLobbyAutoRefresh();
+    app.elements.lobbyBrowserWidget.style.display = "none";
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    app.stopLobbyAutoRefresh();
+  });
+
+  test("quick play joins an available public lobby and handles no availability", async () => {
+    globalThis.fetch
+      .mockResolvedValueOnce({ json: async () => ({ lobby_id: "quick1" }) })
+      .mockResolvedValueOnce({ json: async () => [] });
+    await app.quickPlay();
+    expect(FakeWebSocket.instances.at(-1).url).toContain("/ws/lobby/");
+
+    vi.useFakeTimers();
+    globalThis.fetch.mockResolvedValueOnce({ json: async () => null });
+    const noLobby = app.quickPlay();
+    await Promise.resolve();
+    await vi.runAllTimersAsync();
+    await noLobby;
+    expect(app.elements.quickPlayButton.disabled).toBe(false);
+  });
+
+  test("quick play recovers from a discovery error", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch.mockRejectedValueOnce(new Error("offline"));
+    const request = app.quickPlay();
+    await Promise.resolve();
+    await vi.runAllTimersAsync();
+    await request;
+    expect(app.elements.quickPlayButton.disabled).toBe(false);
+  });
+
+  test("enters lobby UI only after a server confirmation", () => {
+    app.elements.homeLobbyActions.style.display = "grid";
+    app.createLobby(true);
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    app.handleWebSocketMessage({
+      data: JSON.stringify({
+        type: "lcr", lobby_id: "created", lobby_name: "Me's lobby",
+        is_public: true, max_players: 4
+      })
+    });
+    expect(app.elements.homeLobbyActions.style.display).toBe("none");
+    expect(app.getState().isHost).toBe(true);
+
+    app.returnToMainPage();
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "se", msg: "Invalid lobby message." }) });
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    expect(app.getState().isHost).toBe(false);
+  });
+
+  test("stores and restores only active game sessions", async () => {
+    app.setState({
+      userId: "saved-user", userName: "Saved", sessionToken: "x".repeat(32),
+      lobbyId: "abcdef", isHost: true, currentPhase: "lobby"
+    });
+    app.storeSession();
+    expect(app.readStoredSession()).toBeNull();
+
+    sessionStorage.setItem("backyardBridgeSession", JSON.stringify({
+      userId: "saved-user", userName: "Saved", sessionToken: "x".repeat(32),
+      lobbyId: "abcdef", isHost: true, phase: "lobby"
+    }));
+    app.setState({ currentPhase: "home", ws: null });
+    expect(app.restoreStoredSession()).toBe(false);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    sessionStorage.setItem("backyardBridgeSession", JSON.stringify({
+      userId: "saved-user", userName: "Saved", sessionToken: "x".repeat(32),
+      lobbyId: "abcdef", isHost: false, phase: "game"
+    }));
+    app.setState({ currentPhase: "home" });
+    expect(app.restoreStoredSession()).toBe(true);
+    expect(app.elements.welcomeMessage.style.display).toBe("block");
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    expect(app.elements.nameForm.style.display).toBe("none");
+    expect(app.elements.reconnectGameWidget.style.display).toBe("flex");
+    app.reconnectGame();
+    const gameSocket = FakeWebSocket.instances.at(-1);
+    await gameSocket.onopen();
+    expect(gameSocket.sent).toEqual([{ type: "auth", token: "x".repeat(32) }]);
+
+    sessionStorage.setItem("backyardBridgeSession", "{");
+    expect(app.readStoredSession()).toBeNull();
+    sessionStorage.setItem("backyardBridgeSession", JSON.stringify({ phase: "lobby" }));
+    expect(app.restoreStoredSession()).toBe(false);
+    sessionStorage.setItem("backyardBridgeSession", JSON.stringify({
+      userId: "saved-user", userName: "Saved", sessionToken: "x".repeat(32),
+      lobbyId: "abcdef", phase: "unknown"
+    }));
+    expect(app.restoreStoredSession()).toBe(false);
+    expect(sessionStorage.getItem("backyardBridgeSession")).toBeNull();
+  });
+
+  test("retries only game sockets and gives up after sixty seconds", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch.mockResolvedValue({ json: async () => [] });
+    app.setState({
+      userId: "me", sessionToken: "x".repeat(32), lobbyId: "abcdef",
+      currentPhase: "home", reconnectDeadline: 0
+    });
+    app.scheduleReconnect("lobby");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    app.setState({ currentPhase: "lobby", reconnectDeadline: 0 });
+    app.scheduleReconnect("lobby");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    app.setState({
+      currentPhase: "game", reconnectDeadline: 0, reconnectRequested: true, ws: null
+    });
+    app.scheduleReconnect("game");
+    await vi.advanceTimersByTimeAsync(1000);
+    const gameSocket = FakeWebSocket.instances.at(-1);
+    expect(gameSocket.url).toContain("/ws/game/");
+    gameSocket.onclose();
+
+    app.setState({
+      currentPhase: "game", reconnectDeadline: Date.now() - 1, reconnectRequested: true
+    });
+    app.scheduleReconnect("game");
+    expect(app.getState().currentPhase).toBe("home");
+    await vi.runAllTimersAsync();
+  });
+
+  test("shows, expires, and leaves the manual reconnect dialog", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00Z"));
+    app.setState({
+      currentPhase: "game", reconnectDeadline: 0, leavingGame: false,
+      userId: "me", lobbyId: "abcdef", sessionToken: "x".repeat(32)
+    });
+    window.dispatchEvent(new Event("pagehide"));
+    expect(app.readStoredSession().reconnectDeadline).toBe(Date.now() + 60000);
+
+    app.showReconnectGameWidget();
+    expect(app.elements.reconnectGameWidget.style.display).toBe("flex");
+    expect(app.elements.reconnectGameTimer.textContent).toBe("60");
+    const statusSocket = FakeWebSocket.instances.at(-1);
+    statusSocket.onopen();
+    expect(statusSocket.sent).toEqual([{
+      type: "auth", token: "x".repeat(32), intent: "status"
+    }]);
+    statusSocket.onmessage({ data: JSON.stringify({ type: "other", seconds: 42 }) });
+    statusSocket.onmessage({ data: JSON.stringify({ type: "rs", seconds: "bad" }) });
+    statusSocket.onmessage({ data: JSON.stringify({ type: "rs", seconds: 42.5 }) });
+    expect(app.elements.reconnectGameTimer.textContent).toBe("43");
+
+    app.leaveDisconnectedGame();
+    const leaveSocket = FakeWebSocket.instances.at(-1);
+    leaveSocket.onopen();
+    expect(leaveSocket.sent).toEqual([{
+      type: "auth", token: "x".repeat(32), intent: "leave"
+    }]);
+    expect(app.getState().currentPhase).toBe("home");
+
+    app.setState({ currentPhase: "game", reconnectDeadline: Date.now() - 1 });
+    app.updateReconnectCountdown();
+    expect(app.getState().currentPhase).toBe("home");
+    expect(app.elements.errorMessage.textContent).toBe("The reconnect time has expired");
+
+    app.setState({ currentPhase: "game", reconnectDeadline: Date.now() - 1 });
+    app.reconnectGame();
+    expect(app.getState().currentPhase).toBe("home");
+
+    app.setState({
+      currentPhase: "game", reconnectDeadline: Date.now() + 60000,
+      userId: "me", lobbyId: "abcdef", sessionToken: "x".repeat(32)
+    });
+    app.syncReconnectDeadline();
+    FakeWebSocket.instances.at(-1).onmessage({ data: JSON.stringify({ type: "se" }) });
+    expect(app.getState().currentPhase).toBe("home");
+    expect(app.elements.errorMessage.textContent).toBe("The game is no longer available");
+    await vi.runAllTimersAsync();
+  });
+
+  test("handles game socket closure branches and explicit in-game leave", async () => {
+    vi.useFakeTimers();
+    app.setState({
+      currentPhase: "game", reconnectDeadline: 0, reconnectRequested: false,
+      leavingGame: false, ws: null
+    });
+    app.connectGameWebSocket(true);
+    const disconnected = FakeWebSocket.instances.at(-1);
+    disconnected.onclose();
+    expect(app.elements.reconnectGameWidget.style.display).toBe("flex");
+
+    app.setState({ currentPhase: "game", reconnectRequested: true, leavingGame: false });
+    app.connectGameWebSocket(true);
+    FakeWebSocket.instances.at(-1).onclose();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(FakeWebSocket.instances.at(-1).url).toContain("/ws/game/");
+
+    app.setState({ currentPhase: "home", ws: null });
+    app.showLeaveGameConfirmation();
+    expect(app.elements.leaveGameConfirmWidget.style.display).toBe("none");
+    app.setState({ currentPhase: "game", ws: new FakeWebSocket("active") });
+    const active = app.getState().ws;
+    app.showLeaveGameConfirmation();
+    expect(app.elements.leaveGameConfirmWidget.style.display).toBe("flex");
+    expect(active.sent).toEqual([]);
+    app.elements.continueActiveGameButton.click();
+    expect(app.getState().currentPhase).toBe("game");
+    expect(active.sent).toEqual([]);
+    app.showLeaveGameConfirmation();
+    app.elements.leaveGameConfirmWidget.click();
+    expect(app.elements.leaveGameConfirmWidget.style.display).toBe("none");
+    app.showLeaveGameConfirmation();
+    app.confirmLeaveActiveGame();
+    expect(active.sent).toEqual([{ type: "lg" }]);
+    expect(app.getState().currentPhase).toBe("home");
+
+    window.dispatchEvent(new Event("pagehide"));
+    app.connectGameWebSocket(true);
+    FakeWebSocket.instances.at(-1).onclose();
   });
 
   test("preload tolerates decode and network failures", async () => {
@@ -327,6 +649,14 @@ describe("URLs, identity and lobby", () => {
     socket.onopen();
     expect(socket.sent[0].type).toBe("jl");
     expect(socket.onmessage).toBe(app.handleWebSocketMessage);
+
+    app.setState({ currentPhase: "lobby" });
+    socket.onclose();
+    expect(app.getState().currentPhase).toBe("home");
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+
+    app.setState({ currentPhase: "home" });
+    socket.onclose();
   });
 });
 
@@ -361,12 +691,60 @@ describe("messages and game UI", () => {
     expect(app.elements.errorMessage.innerHTML).toBe("Error");
   });
 
+  test("returns lobby clients home when the host closes the lobby", () => {
+    app.handleWebSocketMessage({
+      data: JSON.stringify({
+        type: "jdl", lobby_id: "abcdef", lobby_name: "Host's lobby",
+        is_public: false, max_players: 4, users: [
+          { user_id: "me", user_name: "Host", is_host: true }
+        ], is_host: true
+      })
+    });
+    expect(app.getState().isHost).toBe(true);
+    expect(app.elements.startButton.style.display).toBe("block");
+    expect(document.getElementById("lobbySummaryMeta").textContent).toContain("1/4 players");
+
+    app.handleWebSocketMessage({
+      data: JSON.stringify({
+        type: "lcl", msg: "The host left the lobby, so you were returned to the home page"
+      })
+    });
+    expect(app.getState().currentPhase).toBe("home");
+    expect(sessionStorage.getItem("backyardBridgeSession")).toBeNull();
+    expect(app.elements.errorMessage.textContent).toContain("The host left the lobby");
+  });
+
+  test("clears an active game session when reconnect authentication fails", () => {
+    app.setState({ reconnecting: true, currentPhase: "game" });
+    sessionStorage.setItem("backyardBridgeSession", "saved");
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "se", msg: "Unable to restore this game session." })
+    });
+    expect(app.getState().currentPhase).toBe("home");
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    expect(sessionStorage.getItem("backyardBridgeSession")).toBeNull();
+  });
+
+  test("retries a game restore while the previous socket is still closing", async () => {
+    vi.useFakeTimers();
+    app.setState({
+      reconnecting: true, reconnectRequested: true,
+      currentPhase: "game", reconnectDeadline: 0, ws: null
+    });
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "se", msg: "This player is already connected." })
+    });
+    expect(app.getState().currentPhase).toBe("game");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(FakeWebSocket.instances.at(-1).url).toContain("/ws/game/");
+  });
+
   test("returns a kicked player to the main page with an explanation", () => {
     app.setLobbyUI(false);
     app.handleWebSocketMessage({
       data: JSON.stringify({ type: "kfl", msg: "The host removed you from the lobby." })
     });
-    expect(app.elements.createLobbyButton.style.display).toBe("inline");
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
     expect(app.elements.errorMessage.innerHTML).toBe("The host removed you from the lobby.");
     expect(app.getState().isHost).toBe(false);
   });
@@ -402,15 +780,27 @@ describe("messages and game UI", () => {
   test("returns home and leaves lobby or game", () => {
     const socket = new FakeWebSocket("lobby");
     app.setState({ ws: socket, lobbyId: "abcdef" });
+    app.elements.playerContainer.style.display = "flex";
+    const playableCard = document.createElement("div");
+    app.setCardAction(playableCard, vi.fn(), "Play card");
+    app.elements.playerHand.append(playableCard);
+    const animationClone = document.createElement("div");
+    animationClone.className = "card";
+    document.body.append(animationClone);
     app.leaveLobby();
     expect(socket.sent[0].type).toBe("cll");
-    expect(app.elements.createLobbyButton.style.display).toBe("inline");
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    expect(app.elements.playerContainer.style.display).toBe("none");
+    expect(app.elements.playerHand.children).toHaveLength(0);
+    expect(playableCard.onclick).toBeNull();
+    expect(document.body.contains(animationClone)).toBe(false);
     const player = document.createElement("div");
     player.id = "gone";
     document.body.append(player);
     app.leaveGame("gone");
     expect(document.getElementById("gone")).toBeNull();
     app.leaveGame("missing");
+    app.removeHighlighted("#missing-card");
   });
 
   test("renders users, opponent hands and scores", () => {
@@ -871,6 +1261,6 @@ describe("messages, rules, scores and loading", () => {
     const navigation = app.leaveGameFromWidget();
     await vi.runAllTimersAsync();
     await navigation;
-    expect(window.location.href).toBe("http://localhost:8000");
+    expect(window.location.href).toBe("http://localhost:8000/");
   });
 });
