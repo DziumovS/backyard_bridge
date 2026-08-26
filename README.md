@@ -1,5 +1,19 @@
 # Backyard bridge
-Multiplayer card game, very similar to UNO.
+Backyard Bridge is a real-time multiplayer card game inspired by UNO for
+2–4 players. Play with friends, fill empty seats with competitive
+server-controlled bots, or combine human players and bots in the same game.
+
+Create discoverable public lobbies, start private games protected by a
+six-character invite code, browse currently available rooms, or use Quick Play
+to join an open public lobby automatically. Hosts choose the room capacity,
+remove unwanted players or bots before starting, and can launch the game as
+soon as at least two participants have joined.
+
+The responsive interface supports desktop and mobile screens. Active games
+also support authenticated reconnection for 60 seconds after an accidental
+disconnect, while deliberate departures and host exits are handled by the
+server without leaving stale lobbies or cards on screen.
+
 ![Create a lobby, join a game, and play cards](/src/static/demo.gif)
 There are no winners. Only losers.
 
