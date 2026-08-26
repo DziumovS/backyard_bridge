@@ -13,7 +13,7 @@ class LobbyHandlers:
         self.connection_manager = lobby_manager.connection_manager
 
     async def update_start_button(self, lobby: Lobby) -> None:
-        enable_start = len(lobby.users) == lobby.max_players
+        enable_start = len(lobby.users) >= 2
         await self.connection_manager.send_message(
             websocket=lobby.host.websocket,
             message={"type": EventType.TOGGLE_START_BUTTON.value, "enable": enable_start}
@@ -60,9 +60,15 @@ class LobbyHandlers:
         )
         await self.update_start_button(lobby=lobby)
 
-    async def handle_join_lobby(self, user: User, websocket: WebSocket, lobby_id: str) -> None:
+    async def handle_join_lobby(
+        self,
+        user: User,
+        websocket: WebSocket,
+        lobby_id: str,
+        private_only: bool = False,
+    ) -> None:
         lobby = self.lobby_manager.get_lobby(lobby_id)
-        if not lobby or lobby.in_game or lobby.is_full:
+        if not lobby or lobby.in_game or lobby.is_full or (private_only and lobby.is_public):
             await self.connection_manager.send_message(
                 websocket=websocket,
                 message={"type": EventType.SHOW_ERROR.value, "msg": "The lobby doesn't exist or no slots."},
@@ -159,7 +165,7 @@ class LobbyHandlers:
         if (
             lobby
             and lobby.is_host(user_id)
-            and len(lobby.users) == lobby.max_players
+            and len(lobby.users) >= 2
             and not lobby.in_game
         ):
             lobby.in_game = True
@@ -184,7 +190,10 @@ class LobbyHandlers:
                             if remaining.websocket is not None
                         ],
                         message={"type": EventType.START_GAME.value, "lobby_id": lobby.lobby_id}
-                        if lobby.in_game else {"type": EventType.LOBBY_CLOSED.value}
+                        if lobby.in_game else {
+                            "type": EventType.LOBBY_CLOSED.value,
+                            "msg": "The host left the lobby, so you were returned to the home page",
+                        }
                     )
                     await self.connection_manager.disconnect(websocket=user.websocket, error=error)
                     for remaining in remaining_users:

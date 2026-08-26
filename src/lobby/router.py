@@ -25,7 +25,9 @@ router = APIRouter(
 connection_manager = ConnectionManager()
 lobby_manager = LobbyManager(connection_manager)
 game_manager = GameManager(connection_manager)
-LOBBY_CAPABILITIES = ["kick_users", "lobby_configuration", "public_lobbies"]
+LOBBY_CAPABILITIES = [
+    "kick_users", "lobby_configuration", "lobby_discovery", "quick_play",
+]
 
 
 @router.get("/check_lobby/{lobby_id}")
@@ -41,6 +43,16 @@ async def get_public_lobbies():
     return JSONResponse(content=lobby_manager.get_public_lobbies())
 
 
+@router.get("/lobbies")
+async def get_available_lobbies():
+    return JSONResponse(content=lobby_manager.get_available_lobbies())
+
+
+@router.get("/quick_play")
+async def get_quick_play_lobby():
+    return JSONResponse(content=lobby_manager.get_quick_play_lobby())
+
+
 @router.get("/rules")
 async def get_rules():
     return JSONResponse(content={"rules": rules})
@@ -49,16 +61,7 @@ async def get_rules():
 @router.websocket("/ws/lobby/{user_id}")
 async def websocket_lobby(websocket: WebSocket, user_id: str):
     await connection_manager.connect(websocket=websocket)
-    user = User(user_id=secrets.token_urlsafe(9), websocket=websocket, user_name=user_id)
-    await connection_manager.send_message(
-        websocket,
-        {
-            "type": EventType.SESSION.value,
-            "user_id": user.user_id,
-            "session_token": user.session_token,
-            "capabilities": LOBBY_CAPABILITIES,
-        },
-    )
+    user = None
 
     try:
         while True:
@@ -72,6 +75,17 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                 continue
 
             data = message.model_dump()
+            if user is None:
+                user = User(user_id=secrets.token_urlsafe(9), websocket=websocket, user_name=user_id)
+                await connection_manager.send_message(
+                    websocket,
+                    {
+                        "type": EventType.SESSION.value,
+                        "user_id": user.user_id,
+                        "session_token": user.session_token,
+                        "capabilities": LOBBY_CAPABILITIES,
+                    },
+                )
             if "user_name" in data:
                 user.user_name = data["user_name"].strip()
 
@@ -92,7 +106,12 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
 
                 case EventType.JOIN_LOBBY.value:
                     lobby_id = data.get("lobby_id")
-                    await lobby_manager.handlers.handle_join_lobby(user=user, websocket=websocket, lobby_id=lobby_id)
+                    await lobby_manager.handlers.handle_join_lobby(
+                        user=user,
+                        websocket=websocket,
+                        lobby_id=lobby_id,
+                        private_only=data.get("private_only", False),
+                    )
 
                 case EventType.ADD_BOT.value:
                     try:
@@ -120,7 +139,10 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                     if not game_data:
                         await connection_manager.send_message(
                             websocket,
-                            {"type": EventType.SHOW_ERROR.value, "msg": "Only the host can start a full game."},
+                            {
+                                "type": EventType.SHOW_ERROR.value,
+                                "msg": "Only the host can start a game with at least 2 players.",
+                            },
                         )
                         continue
                     game_id, players = game_data
@@ -130,5 +152,5 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                     break
 
     except WebSocketDisconnect:
-        if lobby_manager.get_lobby_by_user_id(user.user_id):
+        if user and lobby_manager.get_lobby_by_user_id(user.user_id):
             await lobby_manager.handlers.handle_disconnect_lobby(user_id=user.user_id, error=True)
