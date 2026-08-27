@@ -28,8 +28,11 @@ let reconnectTimer;
 let reconnectCountdownInterval;
 let reconnecting = false;
 let reconnectRequested = false;
+let automaticReconnectAttempts = 0;
 let leavingGame = false;
 const reconnectWindowMs = 60000;
+const automaticReconnectMaxAttempts = 5;
+const automaticReconnectDelayMs = 1000;
 const storedSessionKey = "backyardBridgeSession";
 
 
@@ -147,8 +150,17 @@ document.addEventListener("keydown", event => {
 
 window.addEventListener("pagehide", () => {
     if (currentPhase === "game" && !leavingGame) {
-        markGameDisconnected();
+        storeSession();
     }
+});
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    resumeGameConnection();
+});
+
+window.addEventListener("pageshow", event => {
+    if (event.persisted) resumeGameConnection();
 });
 
 restoreStoredSession();
@@ -179,6 +191,7 @@ function clearStoredSession() {
     reconnectDeadline = 0;
     reconnecting = false;
     reconnectRequested = false;
+    automaticReconnectAttempts = 0;
     leavingGame = false;
     clearTimeout(reconnectTimer);
     clearInterval(reconnectCountdownInterval);
@@ -197,6 +210,10 @@ function readStoredSession() {
 
 function scheduleReconnect(phase) {
     if (phase !== "game" || currentPhase !== "game" || !reconnectRequested) return;
+    if (document.visibilityState !== "visible") {
+        pauseAutomaticReconnect();
+        return;
+    }
     if (!reconnectDeadline) reconnectDeadline = Date.now() + reconnectWindowMs;
     if (Date.now() >= reconnectDeadline) {
         clearStoredSession();
@@ -204,11 +221,49 @@ function scheduleReconnect(phase) {
         void showError("Unable to reconnect within 60 seconds.", 5);
         return;
     }
+    if (automaticReconnectAttempts >= automaticReconnectMaxAttempts) {
+        showReconnectGameWidget();
+        return;
+    }
     reconnecting = true;
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(() => {
+        automaticReconnectAttempts += 1;
         connectGameWebSocket(true);
-    }, 1000);
+    }, automaticReconnectDelayMs);
+}
+
+
+function pauseAutomaticReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectRequested = false;
+    reconnecting = false;
+    automaticReconnectAttempts = 0;
+    markGameDisconnected();
+}
+
+
+function beginAutomaticReconnect() {
+    if (document.visibilityState !== "visible"
+        || currentPhase !== "game" || leavingGame || reconnectRequested) return false;
+    markGameDisconnected();
+    reconnectRequested = true;
+    reconnecting = true;
+    automaticReconnectAttempts = 1;
+    closeReconnectGameWidget();
+    setGameUI();
+    connectGameWebSocket(true);
+    return true;
+}
+
+
+function resumeGameConnection() {
+    if (document.visibilityState !== "visible"
+        || currentPhase !== "game" || leavingGame || reconnectRequested) return false;
+    const socketIsUnavailable = !ws
+        || ws.readyState === 2
+        || ws.readyState === 3;
+    return socketIsUnavailable ? beginAutomaticReconnect() : false;
 }
 
 
@@ -225,6 +280,8 @@ function restoreStoredSession() {
     elements.wsId.textContent = userName;
     elements.nameInput.placeholder = userName;
     reconnecting = false;
+    reconnectRequested = false;
+    automaticReconnectAttempts = 0;
     showReconnectGameWidget();
     return true;
 }
@@ -272,6 +329,11 @@ function syncReconnectDeadline() {
 
 function showReconnectGameWidget() {
     markGameDisconnected();
+    clearTimeout(reconnectTimer);
+    reconnectRequested = false;
+    reconnecting = false;
+    automaticReconnectAttempts = 0;
+    finishLoadingAnimation();
     returnToMainPage(true);
     elements.reconnectGameWidget.style.display = "flex";
     updateReconnectCountdown();
@@ -295,6 +357,7 @@ function reconnectGame() {
     }
     reconnectRequested = true;
     reconnecting = true;
+    automaticReconnectAttempts = 1;
     closeReconnectGameWidget();
     setGameUI();
     connectGameWebSocket(true);
@@ -696,6 +759,7 @@ function handleWebSocketMessage(event) {
             isHost = data.is_host;
             closeReconnectGameWidget();
             reconnectRequested = false;
+            automaticReconnectAttempts = 0;
             ensureGamePlayers(data.players);
             reconnecting = false;
             reconnectDeadline = 0;
@@ -809,6 +873,7 @@ function startGame() {
     ws.onclose = null;
     currentPhase = "game";
     reconnectDeadline = 0;
+    automaticReconnectAttempts = 0;
     leavingGame = false;
     storeSession();
     connectGameWebSocket(false);
@@ -836,13 +901,15 @@ function connectGameWebSocket(isReconnect = false) {
     };
     ws.onclose = () => {
         if (currentPhase === "game" && !leavingGame) {
+            if (document.visibilityState !== "visible") {
+                pauseAutomaticReconnect();
+                return;
+            }
             if (reconnectRequested) {
                 scheduleReconnect("game");
                 return;
             }
-            reconnectRequested = false;
-            reconnecting = false;
-            showReconnectGameWidget();
+            beginAutomaticReconnect();
         }
     };
     reconnecting = isReconnect;
@@ -1708,6 +1775,9 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         clearStoredSession,
         readStoredSession,
         scheduleReconnect,
+        pauseAutomaticReconnect,
+        beginAutomaticReconnect,
+        resumeGameConnection,
         restoreStoredSession,
         markGameDisconnected,
         updateReconnectCountdown,
@@ -1736,6 +1806,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             reconnectDeadline,
             reconnecting,
             reconnectRequested,
+            automaticReconnectAttempts,
             leavingGame,
             lobbyIsPublic,
             lobbyPlayerCount,
@@ -1756,6 +1827,9 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
             if ("reconnectDeadline" in state) reconnectDeadline = state.reconnectDeadline;
             if ("reconnecting" in state) reconnecting = state.reconnecting;
             if ("reconnectRequested" in state) reconnectRequested = state.reconnectRequested;
+            if ("automaticReconnectAttempts" in state) {
+                automaticReconnectAttempts = state.automaticReconnectAttempts;
+            }
             if ("leavingGame" in state) leavingGame = state.leavingGame;
             if ("lobbyIsPublic" in state) lobbyIsPublic = state.lobbyIsPublic;
             if ("lobbyPlayerCount" in state) lobbyPlayerCount = state.lobbyPlayerCount;

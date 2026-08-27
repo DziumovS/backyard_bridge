@@ -290,7 +290,7 @@ test("player name backgrounds are limited to the lobby", async ({ browser }) => 
   await context.close();
 });
 
-test("refreshing an active game offers a timed manual reconnect", async ({ browser }) => {
+test("refreshing an active game asks before reconnecting", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
   await createLobby(page, 1, { maxPlayers: 2 });
@@ -305,7 +305,7 @@ test("refreshing an active game offers a timed manual reconnect", async ({ brows
   expect(seconds).toBeLessThanOrEqual(60);
 
   await page.getByRole("button", { name: "Reconnect Game" }).click();
-  await expect(page.locator("#playerHand img")).not.toHaveCount(0);
+  await expect(page.locator("#playerHand img")).not.toHaveCount(0, { timeout: 10_000 });
   await expect(page.locator("#currentCards")).toBeVisible();
   await expect(page.locator("#rightCard img")).toHaveCount(1);
   await expect(page.locator("#cardsLeft")).not.toHaveText("");
@@ -313,6 +313,69 @@ test("refreshing an active game offers a timed manual reconnect", async ({ brows
   await expect(page.locator("#welcomeMessage")).toBeHidden();
   await expect(page.locator("#homeLobbyActions")).toBeHidden();
   await expect(page.locator("#nameForm")).toBeHidden();
+  await context.close();
+});
+
+test("mobile game waits in the background and reconnects silently on return", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
+  });
+  await context.addInitScript(() => {
+    globalThis.__BACKYARD_BRIDGE_TEST__ = true;
+  });
+  const page = await context.newPage();
+  await createLobby(page, 1, { maxPlayers: 2 });
+  await page.getByRole("button", { name: "Start Game" }).click();
+  await expect(page.locator("#playerHand img")).not.toHaveCount(0);
+
+  await page.evaluate(() => {
+    globalThis.__forcedVisibilityState = "hidden";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => globalThis.__forcedVisibilityState
+    });
+    globalThis.__backyardBridge.getState().ws.close();
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const state = globalThis.__backyardBridge.getState();
+    return { requested: state.reconnectRequested, readyState: state.ws.readyState };
+  })).toEqual({ requested: false, readyState: 3 });
+  await expect(page.getByRole("dialog", { name: "Game disconnected" })).toBeHidden();
+
+  await page.evaluate(() => {
+    globalThis.__forcedVisibilityState = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const state = globalThis.__backyardBridge.getState();
+    return {
+      reconnecting: state.reconnecting,
+      requested: state.reconnectRequested,
+      readyState: state.ws.readyState
+    };
+  }), { timeout: 10_000 }).toEqual({
+    reconnecting: false,
+    requested: false,
+    readyState: 1
+  });
+  await expect(page.locator("#currentCards")).toBeVisible();
+  await expect(page.locator("#homeLobbyActions")).toBeHidden();
+  await page.evaluate(() => {
+    const socket = globalThis.__backyardBridge.getState().ws;
+    const send = socket.send.bind(socket);
+    globalThis.__messagesAfterReconnect = [];
+    socket.send = payload => {
+      globalThis.__messagesAfterReconnect.push(JSON.parse(payload));
+      send(payload);
+    };
+  });
+  const resumedAction = page.locator(
+    '#leftCard[aria-disabled="false"], #rightCard[aria-disabled="false"]'
+  ).first();
+  await expect(resumedAction).toBeVisible({ timeout: 10_000 });
+  await resumedAction.click();
+  await expect.poll(() => page.evaluate(() => globalThis.__messagesAfterReconnect))
+    .toContainEqual(expect.objectContaining({ type: expect.stringMatching(/^(dc|st)$/) }));
   await context.close();
 });
 

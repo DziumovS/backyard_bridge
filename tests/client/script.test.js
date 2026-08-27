@@ -69,6 +69,7 @@ beforeEach(() => {
     reconnectDeadline: 0,
     reconnecting: false,
     reconnectRequested: false,
+    automaticReconnectAttempts: 0,
     leavingGame: false,
     lobbyIsPublic: false,
     lobbyPlayerCount: 0,
@@ -457,7 +458,7 @@ describe("URLs, identity and lobby", () => {
     expect(app.getState().isHost).toBe(false);
   });
 
-  test("stores and restores only active game sessions", async () => {
+  test("stores active games and asks before restoring a new page", async () => {
     app.setState({
       userId: "saved-user", userName: "Saved", sessionToken: "x".repeat(32),
       lobbyId: "abcdef", isHost: true, currentPhase: "lobby"
@@ -483,6 +484,7 @@ describe("URLs, identity and lobby", () => {
     expect(app.elements.homeLobbyActions.style.display).toBe("grid");
     expect(app.elements.nameForm.style.display).toBe("none");
     expect(app.elements.reconnectGameWidget.style.display).toBe("flex");
+    expect(app.getState().reconnectRequested).toBe(false);
     app.reconnectGame();
     const gameSocket = FakeWebSocket.instances.at(-1);
     await gameSocket.onopen();
@@ -541,7 +543,7 @@ describe("URLs, identity and lobby", () => {
       userId: "me", lobbyId: "abcdef", sessionToken: "x".repeat(32)
     });
     window.dispatchEvent(new Event("pagehide"));
-    expect(app.readStoredSession().reconnectDeadline).toBe(Date.now() + 60000);
+    expect(app.readStoredSession().reconnectDeadline).toBe(0);
 
     app.showReconnectGameWidget();
     expect(app.elements.reconnectGameWidget.style.display).toBe("flex");
@@ -555,6 +557,15 @@ describe("URLs, identity and lobby", () => {
     statusSocket.onmessage({ data: JSON.stringify({ type: "rs", seconds: "bad" }) });
     statusSocket.onmessage({ data: JSON.stringify({ type: "rs", seconds: 42.5 }) });
     expect(app.elements.reconnectGameTimer.textContent).toBe("43");
+
+    app.reconnectGame();
+    const manualReconnectSocket = FakeWebSocket.instances.at(-1);
+    manualReconnectSocket.onopen();
+    expect(manualReconnectSocket.sent).toEqual([{
+      type: "auth", token: "x".repeat(32)
+    }]);
+    expect(app.elements.reconnectGameWidget.style.display).toBe("none");
+    app.showReconnectGameWidget();
 
     app.leaveDisconnectedGame();
     const leaveSocket = FakeWebSocket.instances.at(-1);
@@ -584,7 +595,7 @@ describe("URLs, identity and lobby", () => {
     await vi.runAllTimersAsync();
   });
 
-  test("handles game socket closure branches and explicit in-game leave", async () => {
+  test("silently reconnects game socket closures before showing the manual dialog", async () => {
     vi.useFakeTimers();
     app.setState({
       currentPhase: "game", reconnectDeadline: 0, reconnectRequested: false,
@@ -593,13 +604,21 @@ describe("URLs, identity and lobby", () => {
     app.connectGameWebSocket(true);
     const disconnected = FakeWebSocket.instances.at(-1);
     disconnected.onclose();
-    expect(app.elements.reconnectGameWidget.style.display).toBe("flex");
+    expect(app.elements.reconnectGameWidget.style.display).toBe("none");
+    expect(app.getState().reconnectRequested).toBe(true);
+    expect(app.getState().automaticReconnectAttempts).toBe(1);
+    expect(FakeWebSocket.instances.at(-1)).not.toBe(disconnected);
 
-    app.setState({ currentPhase: "game", reconnectRequested: true, leavingGame: false });
-    app.connectGameWebSocket(true);
     FakeWebSocket.instances.at(-1).onclose();
     await vi.advanceTimersByTimeAsync(1000);
     expect(FakeWebSocket.instances.at(-1).url).toContain("/ws/game/");
+
+    app.setState({
+      currentPhase: "game", reconnectRequested: true, reconnecting: true,
+      automaticReconnectAttempts: 5, leavingGame: false
+    });
+    FakeWebSocket.instances.at(-1).onclose();
+    expect(app.elements.reconnectGameWidget.style.display).toBe("flex");
 
     app.setState({ currentPhase: "home", ws: null });
     app.showLeaveGameConfirmation();
@@ -623,6 +642,73 @@ describe("URLs, identity and lobby", () => {
     window.dispatchEvent(new Event("pagehide"));
     app.connectGameWebSocket(true);
     FakeWebSocket.instances.at(-1).onclose();
+  });
+
+  test("resumes a closed game socket when the page becomes visible", () => {
+    const visibilityState = vi.spyOn(document, "visibilityState", "get");
+    const activeSocket = new FakeWebSocket("active");
+    activeSocket.readyState = 1;
+    app.setState({
+      currentPhase: "game", ws: activeSocket, reconnectRequested: false,
+      leavingGame: false, reconnectDeadline: 0
+    });
+    expect(app.resumeGameConnection()).toBe(false);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    visibilityState.mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    activeSocket.readyState = 3;
+    visibilityState.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(app.elements.reconnectGameWidget.style.display).toBe("none");
+
+    app.setState({ reconnectRequested: false, leavingGame: true, ws: null });
+    expect(app.resumeGameConnection()).toBe(false);
+    visibilityState.mockRestore();
+  });
+
+  test("uses pageshow reconnect only when restoring a cached page", () => {
+    const visibilityState = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    app.setState({
+      currentPhase: "game", ws: null, reconnectRequested: false,
+      leavingGame: false, reconnectDeadline: 0
+    });
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: false }));
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(app.getState().reconnectRequested).toBe(true);
+    visibilityState.mockRestore();
+  });
+
+  test("waits for the foreground before reconnecting a hidden game", () => {
+    const visibilityState = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    app.setState({
+      currentPhase: "game", ws: null, reconnectRequested: false,
+      reconnecting: false, leavingGame: false, reconnectDeadline: 0
+    });
+    app.connectGameWebSocket(true);
+    const hiddenSocket = FakeWebSocket.instances.at(-1);
+    hiddenSocket.readyState = 3;
+    hiddenSocket.onclose();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(app.getState().reconnectRequested).toBe(false);
+    expect(app.getState().reconnecting).toBe(false);
+    expect(app.getState().reconnectDeadline).toBeGreaterThan(0);
+
+    app.setState({ reconnectRequested: true, reconnecting: true });
+    app.scheduleReconnect("game");
+    expect(app.getState().reconnectRequested).toBe(false);
+
+    visibilityState.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(app.getState().reconnectRequested).toBe(true);
+    visibilityState.mockRestore();
   });
 
   test("preload tolerates decode and network failures", async () => {
