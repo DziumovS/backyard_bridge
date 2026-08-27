@@ -1,6 +1,6 @@
 # Backyard bridge
 Backyard Bridge is a real-time multiplayer card game inspired by UNO for
-2–4 players. Play with friends, fill empty seats with competitive
+2-4 players. Play with friends, fill empty seats with competitive
 server-controlled bots, or combine human players and bots in the same game.
 
 Create discoverable public lobbies, start private games protected by a
