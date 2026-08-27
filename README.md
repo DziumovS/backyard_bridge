@@ -15,7 +15,7 @@ disconnect, while deliberate departures and host exits are handled by the
 server without leaving stale lobbies or cards on screen.
 
 <p align="center">
-  <img src="/src/static/demo.gif" alt="Desktop lobby and gameplay demo" width="64%" align="top">
+  <img src="/src/static/demo.gif" alt="Desktop lobby and gameplay demo" width="70%" align="top">
   <img src="/src/static/demo-mobile.gif" alt="Mobile lobby and gameplay demo" width="18%" align="top">
 </p>
 There are no winners. Only losers.
