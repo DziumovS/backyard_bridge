@@ -113,12 +113,18 @@ class EventHandler:
             message={"type": EventType.ANIMATE_PLAYED_CARD.value, "card": card.card_to_dict()},
         )
 
-    async def _broadcast_draw_animation(self, game, current_player: Player) -> None:
+    async def _broadcast_draw_animation(
+        self,
+        game,
+        current_player: Player,
+        include_current: bool = False,
+    ) -> None:
         await self.gm.connection_manager.broadcast(
             websockets=[
                 player.websocket
                 for player in game.players
-                if player.user_id != current_player.user_id and player.websocket is not None
+                if (include_current or player.user_id != current_player.user_id)
+                and player.websocket is not None
             ],
             message={"type": EventType.ANIMATE_DRAW_CARD.value, "current_player": current_player.user_id},
         )
@@ -187,7 +193,7 @@ class EventHandler:
             if player_id == game.host_id:
                 game.is_active = False
                 host_message = (
-                    "The host did not reconnect, so the game ended"
+                    "The host didn't reconnect. Game over"
                     if error
                     else "The host left the game, so you were returned to the home page"
                 )
@@ -225,7 +231,7 @@ class EventHandler:
 
             self.gm.remove_player(game=game, player=left_player)
             safe_name = escape(left_player.user_name)
-            message = f"Player <b>{safe_name}</b> has left the game."
+            message = f"Player <b>{safe_name}</b> left the game."
 
             await self.gm.connection_manager.broadcast(
                 websockets=game.get_players_websocket(),
@@ -242,8 +248,8 @@ class EventHandler:
             human_players = [player for player in game.players if not player.is_bot]
             if len(game.players) <= 1 or not human_players:
                 game.is_active = False
-                message = (f"<b>{safe_name}</b> has left the game, not enough players to continue the game."
-                           f" Returning to the home page...")
+                message = (f"<b>{safe_name}</b> left the game. Not enough players to continue."
+                           f" Returning home...")
 
                 await self.gm.connection_manager.broadcast(
                     websockets=game.get_players_websocket(),
@@ -255,7 +261,7 @@ class EventHandler:
                 self.gm.remove_game(game.game_id)
             else:
                 await self.gm.send_turn_and_game_data_to_all(game=game, current_player=next_player)
-                await self.gm.run_bot_turns(game)
+                await self.gm.run_automatic_actions(game)
 
     async def handle_game_started(self, player_id: str, game, send_first_turn: bool = True) -> None:
         player = game.get_player_or_none(user_id=player_id)
@@ -299,7 +305,7 @@ class EventHandler:
             raise InvalidAction("You must complete the required action first.")
         jack_chain = previous_card.rank == "J" and game.chosen_suit and game.chosen_suit["chooser_id"] == current_player.user_id
         if not card.can_play_on(previous_card, chosen_suit=game.chosen_suit, j=bool(jack_chain)):
-            raise InvalidAction("This card cannot be played now.")
+            raise InvalidAction("This card can't be played now.")
         if card.rank == "J" and chosen_suit is None:
             raise InvalidAction("Choose a suit for the Jack.")
         if card.rank != "J" and chosen_suit is not None:
@@ -346,7 +352,7 @@ class EventHandler:
             if not game.why_end:
                 if game.is_it_bridge(card=card):
                     game.bridge_pending_for = current_player.user_id
-                    message = "You have played the 4-th card in a row of the same value. Would you say bridge?"
+                    message = "Fourth card of the same rank. Call Bridge?"
                     if current_player.websocket is not None:
                         await self.gm.connection_manager.send_message(
                             websocket=current_player.websocket,
@@ -357,21 +363,40 @@ class EventHandler:
                             }
                         )
 
-    async def handle_drew_card(self, game, player_id: str | None = None) -> None:
+    async def handle_drew_card(
+        self,
+        game,
+        player_id: str | None = None,
+        animate_current: bool = False,
+    ) -> None:
         current_player = self._current_player_for(game, player_id)
         if not (current_player.options.must_draw or current_player.options.can_draw):
-            raise InvalidAction("You cannot draw a card now.")
+            raise InvalidAction("You can't draw a card now.")
         if game.deck.is_decks_empty():
-            raise InvalidAction("There are no cards left to draw.")
+            raise InvalidAction("No cards left to draw.")
         previous_scores_rate = game.deck.scores_rate
         current_player.draw_card(deck=game.deck)
         scores_rate_changed = game.deck.scores_rate != previous_scores_rate
-        await self._broadcast_draw_animation(game, current_player)
+        await self._broadcast_draw_animation(
+            game,
+            current_player,
+            include_current=animate_current,
+        )
 
         playable_cards = current_player.get_playable_cards(current_card=game.current_card, chosen_suit=game.chosen_suit)
 
         if current_player.options.must_draw:
             current_player.options.must_draw -= 1
+            if (
+                current_player.options.must_draw == 0
+                and not current_player.options.must_skip
+                and game.current_card.rank != "6"
+            ):
+                current_player.options.can_draw = False
+                if playable_cards:
+                    current_player.options.can_skip = True
+                else:
+                    current_player.options.must_skip = True
         elif current_player.options.must_skip:
             current_player.options.must_skip = False
         elif current_player.options.can_draw and not playable_cards:
@@ -393,7 +418,7 @@ class EventHandler:
     async def handle_skip_turn(self, game, player_id: str | None = None) -> None:
         current_player = self._current_player_for(game, player_id)
         if not (current_player.options.must_skip or current_player.options.can_skip or game.current_card.rank == "J"):
-            raise InvalidAction("You cannot skip the turn now.")
+            raise InvalidAction("You can't skip now.")
 
         if current_player.user_id not in game.last_cards_j:
             game.last_cards_j.clear()
@@ -419,7 +444,7 @@ class EventHandler:
                 await self._handle_game_over(current_player=next_player, next_player=next_player, game=game)
 
     async def handle_show_my_move(self, game, data: dict) -> None:
-        raise InvalidAction("Client-driven animation events are no longer accepted.")
+        raise InvalidAction("Client animation events aren't accepted.")
 
     async def handle_game_over(self, game, player_id: str | None = None) -> None:
         current_player = self._current_player_for(game, player_id)

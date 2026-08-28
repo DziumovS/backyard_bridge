@@ -34,7 +34,7 @@ LOBBY_CAPABILITIES = [
 async def check_lobby(lobby_id: str):
     lobby = lobby_manager.lobbies.get(lobby_id)
     exists = lobby is not None and not lobby.in_game and not lobby.is_full
-    message = "The lobby doesn't exist or no slots."
+    message = "The lobby doesn't exist or is full."
     return JSONResponse(content={"exists": exists, "msg": message})
 
 
@@ -141,7 +141,7 @@ async def websocket_lobby(websocket: WebSocket, user_id: str):
                             websocket,
                             {
                                 "type": EventType.SHOW_ERROR.value,
-                                "msg": "Only the host can start a game with at least 2 players.",
+                                "msg": "Only the host can start; at least 2 players are required.",
                             },
                         )
                         continue

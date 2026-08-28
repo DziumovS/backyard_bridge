@@ -251,9 +251,9 @@ async def test_only_host_can_kick_humans_and_bots(users):
 
     with pytest.raises(LobbyActionError, match="Only the host"):
         await manager.handlers.handle_kick_user(guest.user_id, bot.user_id)
-    with pytest.raises(LobbyActionError, match="cannot remove themselves"):
+    with pytest.raises(LobbyActionError, match="can't remove themselves"):
         await manager.handlers.handle_kick_user(host.user_id, host.user_id)
-    with pytest.raises(LobbyActionError, match="no longer"):
+    with pytest.raises(LobbyActionError, match="isn't in the lobby"):
         await manager.handlers.handle_kick_user(host.user_id, "missing")
 
     await manager.handlers.handle_kick_user(host.user_id, bot.user_id)

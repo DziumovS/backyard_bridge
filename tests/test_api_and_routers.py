@@ -51,7 +51,7 @@ def test_http_endpoints(monkeypatch):
     rules = client.get("/rules")
     assert rules.status_code == 200 and "MAIN RULES" in rules.json()["rules"]
     missing = client.get("/check_lobby/missing").json()
-    assert missing == {"exists": False, "msg": "The lobby doesn't exist or no slots."}
+    assert missing == {"exists": False, "msg": "The lobby doesn't exist or is full."}
     cards = client.get("/get_cards")
     assert cards.status_code == 200
     assert "/static/cards/closed_card.png" in cards.json()
@@ -220,7 +220,7 @@ async def test_private_lobby_requires_correct_code_and_rejects_full_room(live_se
         }))
         assert (await _receive_json(extra_guest))["type"] == "sid"
         refusal = await _receive_json(extra_guest)
-        assert refusal["type"] == "se" and "no slots" in refusal["msg"]
+        assert refusal["type"] == "se" and "is full" in refusal["msg"]
     finally:
         for socket in (extra_guest, valid_guest, wrong_guest, host):
             if socket is not None:
@@ -358,7 +358,7 @@ async def test_host_kicks_human_and_bot_from_lobby(live_server):
 
         await host.send(json.dumps({"type": "ku", "user_id": host_session["user_id"]}))
         assert await _receive_json(host) == {
-            "type": "se", "msg": "The host cannot remove themselves.",
+            "type": "se", "msg": "The host can't remove themselves.",
         }
     finally:
         if guest is not None:
@@ -513,6 +513,24 @@ async def _collect_game_data(sockets):
     return states, batches
 
 
+async def _settle_automatic_actions(sockets, states, batches, current_id):
+    for _ in range(30):
+        options = states[current_id]["player_options"]
+        if not (options["must_draw"] or options["must_skip"]):
+            return states, batches, current_id
+
+        states, next_batches = await _collect_game_data(sockets)
+        for player_id, messages in next_batches.items():
+            batches[player_id].extend(messages)
+        current_ids = {
+            player_id for player_id, state in states.items() if state["current_player"]
+        }
+        assert len(current_ids) == 1
+        current_id = current_ids.pop()
+
+    pytest.fail("Automatic actions did not settle after 30 updates")
+
+
 async def _advance_turn(sockets, states, current_id):
     for _ in range(30):
         state = states[current_id]
@@ -537,13 +555,14 @@ async def _advance_turn(sockets, states, current_id):
 
         await sockets[current_id].send(json.dumps(action))
         states, batches = await _collect_game_data(sockets)
+        states, batches, settled_current_id = await _settle_automatic_actions(
+            sockets, states, batches, current_id,
+        )
         turn_messages = [
             message for messages in batches.values() for message in messages if message["type"] == "wt"
         ]
         if turn_messages:
-            next_ids = {message["current_player"] for message in turn_messages}
-            assert len(next_ids) == 1
-            return states, next_ids.pop()
+            return states, settled_current_id
         assert not states[current_id]["round_over"], "Round ended before a full turn rotation"
     pytest.fail("Turn did not advance after 30 legal actions")
 
@@ -558,7 +577,7 @@ async def test_game_websocket_end_to_end_for_every_supported_player_count(live_s
         await lobby_sockets[1].send('{"type":"sg"}')
         rejected_start = await _receive_json(lobby_sockets[1])
         assert rejected_start == {
-            "type": "se", "msg": "Only the host can start a game with at least 2 players.",
+            "type": "se", "msg": "Only the host can start; at least 2 players are required.",
         }
 
         if player_count == 4:
@@ -570,7 +589,7 @@ async def test_game_websocket_end_to_end_for_every_supported_player_count(live_s
                 assert (await _receive_json(fifth))["type"] == "sid"
                 refusal = await _receive_json(fifth)
                 assert refusal["type"] == "se"
-                assert "no slots" in refusal["msg"]
+                assert "is full" in refusal["msg"]
             finally:
                 await fifth.close()
 
@@ -600,7 +619,10 @@ async def test_game_websocket_end_to_end_for_every_supported_player_count(live_s
             "card": first_card,
             "chosen_suit": "♠" if first_card["rank"] == "J" else None,
         }))
-        states, _ = await _collect_game_data(sockets)
+        states, batches = await _collect_game_data(sockets)
+        states, batches, current_id = await _settle_automatic_actions(
+            sockets, states, batches, current_id,
+        )
 
         non_current = next(player_id for player_id in sockets if player_id != current_id)
         await sockets[non_current].send('{"type":"dc"}')
@@ -690,7 +712,7 @@ async def test_game_disconnects_for_every_supported_player_count(
             for socket in remaining.values():
                 message = await _receive_json(socket)
                 assert message["type"] == "nep"
-                assert message["msg"] == "The host did not reconnect, so the game ended"
+                assert message["msg"] == "The host didn't reconnect. Game over"
             return
 
         states_after = {}
@@ -701,7 +723,7 @@ async def test_game_disconnects_for_every_supported_player_count(
             if player_count == 2:
                 not_enough = await _receive_json(socket)
                 assert not_enough["type"] == "nep"
-                assert "not enough players" in not_enough["msg"]
+                assert "Not enough players" in not_enough["msg"]
                 continue
             whose_turn = await _receive_json(socket)
             assert whose_turn["type"] == "wt"
@@ -1046,7 +1068,7 @@ async def test_game_router_aborts_each_startup_timeout(game, monkeypatch, timeou
     websocket = FakeWebSocket(incoming)
     await websocket_game(websocket, game.game_id, player.user_id)
 
-    assert websocket.sent[-1] == {"type": "se", "msg": "Game startup timed out. Please try again."}
+    assert websocket.sent[-1] == {"type": "se", "msg": "Game startup timed out. Try again."}
     assert websocket.closed
     assert game_manager.get_game(game.game_id) is None
 
@@ -1079,7 +1101,7 @@ async def test_lobby_router_reports_protocol_and_start_errors(monkeypatch):
         "Invalid lobby message.",
         "Only the host can add a bot.",
         "Only the host can remove players.",
-        "Only the host can start a game with at least 2 players.",
+        "Only the host can start; at least 2 players are required.",
     ]
 
 

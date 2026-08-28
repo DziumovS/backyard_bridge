@@ -110,7 +110,7 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
                     if completed_initialization:
                         async with game.action_lock:
                             if game.get_current_player().is_bot:
-                                await game_manager.run_bot_turns(game)
+                                await game_manager.run_automatic_actions(game)
                             else:
                                 await game_manager.event_handler.send_first_turn(game)
                     continue
@@ -139,7 +139,7 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
 
                         case EventType.RESET_GAME.value:
                             await game_manager.event_handler.handle_reset_game(game=game, player_id=user_id)
-                    await game_manager.run_bot_turns(game)
+                    await game_manager.run_automatic_actions(game)
             except InvalidAction as error:
                 await game_manager.connection_manager.send_message(
                     websocket,

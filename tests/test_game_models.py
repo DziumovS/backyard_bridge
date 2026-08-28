@@ -115,9 +115,9 @@ def test_score_exactly_125_resets(game):
 @pytest.mark.parametrize(
     ("reason", "expected"),
     [
-        ("bridge", "call 'bridge'"),
-        ("empty_deck", "No more cards"),
-        ("empty_hand", "has won"),
+        ("bridge", "called Bridge"),
+        ("empty_deck", "empty"),
+        ("empty_hand", "played all their cards"),
     ],
 )
 def test_game_over_messages_without_losers(game, reason, expected):
@@ -126,7 +126,7 @@ def test_game_over_messages_without_losers(game, reason, expected):
     game.players[1].scores = 20
     message, results = game.get_game_over_message(game.players[0])
     assert expected in message
-    assert "Now the scores" in results
+    assert "Round scores" in results
 
 
 def test_game_over_messages_with_one_and_multiple_winners(game):
@@ -134,7 +134,7 @@ def test_game_over_messages_with_one_and_multiple_winners(game):
     first.scores = 126
     second.scores = 20
     _, results = game.get_game_over_message(first)
-    assert "a loser" in results and "winner" in results and "god" in results
+    assert "a player has" in results and "winner" in results
 
     from src.user.models import Player
 
@@ -142,12 +142,12 @@ def test_game_over_messages_with_one_and_multiple_winners(game):
     third.scores = 30
     game.players.append(third)
     _, results = game.get_game_over_message(first)
-    assert "winners" in results and "gods" in results
+    assert "winners" in results
 
     second.scores = 130
     third.scores = 140
     _, results = game.get_game_over_message(first)
-    assert "losers" in results
+    assert "players have" in results
 
 
 def test_reset_game_resets_round_state(game, monkeypatch):

@@ -120,7 +120,7 @@ async def test_private_code_join_cannot_open_a_public_lobby(users):
 
     assert guest.user_id not in lobby.users
     assert guest.websocket.sent[-1] == {
-        "type": "se", "msg": "The lobby doesn't exist or no slots.",
+        "type": "se", "msg": "The lobby doesn't exist or is full.",
     }
 
 
@@ -204,7 +204,7 @@ async def test_server_validates_card_suit_and_options(game):
 
     with pytest.raises(InvalidAction, match="not in your hand"):
         await handler.handle_played_card({"rank": "A", "suit": "♣"}, None, game, current.user_id)
-    with pytest.raises(InvalidAction, match="cannot be played"):
+    with pytest.raises(InvalidAction, match="can't be played"):
         await handler.handle_played_card(current.hand[0].card_to_dict(), None, game, current.user_id)
     with pytest.raises(InvalidAction, match="Choose a suit"):
         await handler.handle_played_card(current.hand[1].card_to_dict(), None, game, current.user_id)
@@ -221,9 +221,9 @@ async def test_server_rejects_invalid_draw_skip_bridge_and_reset(game):
     _, handler = setup_game(game)
     current = game.get_current_player()
     current.options.can_draw = False
-    with pytest.raises(InvalidAction, match="cannot draw"):
+    with pytest.raises(InvalidAction, match="can't draw"):
         await handler.handle_drew_card(game, current.user_id)
-    with pytest.raises(InvalidAction, match="cannot skip"):
+    with pytest.raises(InvalidAction, match="can't skip"):
         await handler.handle_skip_turn(game, current.user_id)
     with pytest.raises(InvalidAction, match="Bridge"):
         await handler.handle_game_over(game, current.user_id)
@@ -239,7 +239,7 @@ async def test_empty_deck_and_finished_round_reject_actions(game):
     current = game.get_current_player()
     game.deck.deck = []
     game.deck.bounce_deck = []
-    with pytest.raises(InvalidAction, match="no cards"):
+    with pytest.raises(InvalidAction, match="No cards"):
         await handler.handle_drew_card(game, current.user_id)
     game.round_over = True
     with pytest.raises(InvalidAction, match="already over"):

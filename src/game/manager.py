@@ -8,6 +8,7 @@ from src.game.enums import EventType
 from src.user.models import Player
 from src.game.models import Game
 from src.game.handlers import EventHandler
+from src.game.automation import AutomaticTurnController
 from src.bot.controller import BotController
 from src.config import get_reconnect_grace_seconds
 
@@ -22,6 +23,7 @@ class GameManager:
         self.reconnect_grace_seconds = get_reconnect_grace_seconds()
         self.event_handler = EventHandler(game_manager_instance=self)
         self.bot_controller = BotController(self)
+        self.automatic_turn_controller = AutomaticTurnController(self)
 
     def create_game(self, game: Game) -> None:
         self.games[game.game_id] = game
@@ -120,7 +122,7 @@ class GameManager:
         game.is_active = False
         await self.connection_manager.send_message(
             websocket,
-            {"type": EventType.SHOW_ERROR.value, "msg": "Game startup timed out. Please try again."},
+            {"type": EventType.SHOW_ERROR.value, "msg": "Game startup timed out. Try again."},
         )
         await self.connection_manager.disconnect(websocket)
         self.remove_game(game.game_id)
@@ -151,6 +153,11 @@ class GameManager:
             return
 
         cards = player.prepare_playable_cards(game=game, chosen_suit=chosen_suit, playable_cards=playable_cards)
+        automatic_action_pending = (
+            current_player
+            and not player.is_bot
+            and self.automatic_turn_controller.next_action(game) is not None
+        )
 
         await self.connection_manager.send_message(
             websocket=player.websocket,
@@ -160,6 +167,7 @@ class GameManager:
                 "playable_cards": cards,
                 "deck_len": len(game.deck),
                 "current_player": current_player,
+                "automatic_action_pending": automatic_action_pending,
                 "chosen_suit": game.chosen_suit,
                 "current_card": game.current_card_to_dict(),
                 "player_options": player.options_to_dict(),
@@ -172,6 +180,7 @@ class GameManager:
                         "user_id": current.user_id,
                         "user_name": current.user_name,
                         "is_bot": current.is_bot,
+                        "scores": current.scores,
                     }
                     for current in game.players
                 ],
@@ -219,3 +228,6 @@ class GameManager:
 
     async def run_bot_turns(self, game: Game) -> None:
         await self.bot_controller.run_until_human_turn(game)
+
+    async def run_automatic_actions(self, game: Game) -> None:
+        await self.automatic_turn_controller.run(game)

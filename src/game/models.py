@@ -230,13 +230,13 @@ class Game:
 
         match self.why_end:
             case "bridge":
-                message = f"<b>{player_username}</b> call 'bridge', so the match is over.<br><br>"
+                message = f"<b>{player_username}</b> called Bridge. The round is over.<br><br>"
             case "empty_deck":
-                message = f"<b>No more cards</b> in the deck, so the match is over.<br><br>"
+                message = "The deck is <b>empty</b>. The round is over.<br><br>"
             case _:
-                message = f"<b>{player_username}</b> has won: he has no more cards, so the match is over.<br><br>"
+                message = f"<b>{player_username}</b> played all their cards. The round is over.<br><br>"
 
-        results = f"{message}Now the scores are:<br>"
+        results = f"{message}Round scores:<br>"
         results += "<br>".join(
             [
                 f"&nbsp;&nbsp;<b>{player['player']}</b>: <b>{player['scores']}</b> points"
@@ -245,8 +245,8 @@ class Game:
         )
 
         if losers:
-            results = (f"{message}Also, the <b>game is over too</b> because we have "
-                       f"{"a loser" if len(losers) == 1 else "losers"} by points:<br>")
+            results = (f"{message}The <b>game is over</b>: "
+                       f"{"a player has" if len(losers) == 1 else "players have"} exceeded 125 points.<br>")
             results += "<br>".join(
                 [
                     f"&nbsp;&nbsp;<b>{user['player']}</b>: <b>{user['scores']}</b> points"
@@ -255,14 +255,13 @@ class Game:
             )
 
             if winners:
-                w_ws, g_gs = ("winner", "god") if len(winners) == 1 else ("winners", "gods")
-                results += f"<br><br>And <b>congratulations</b> to the {w_ws} of this game:<br>"
+                winner_label = "winner" if len(winners) == 1 else "winners"
+                results += f"<br><br><b>Congratulations</b> to the {winner_label}:<br>"
                 results += "<br>".join(
                     [
                         f"&nbsp;&nbsp;<b>{user['player']}</b>: <b>{user['scores']}</b> points"
                         for user in winners
                     ]
                 )
-                results += f"<br>You fought like {g_gs}!"
 
         return message, results

@@ -123,7 +123,7 @@ async def test_game_over_penalty_draw_then_scores(game, monkeypatch):
 @pytest.mark.parametrize(
     ("must_draw", "must_skip", "can_draw", "expected"),
     [
-        (1, False, True, (0, False, True)),
+        (1, False, True, (0, True, False)),
         (0, True, True, (0, False, True)),
         (0, False, True, (0, True, True)),
     ],
@@ -279,12 +279,12 @@ async def test_disconnect_player_returns_hand_transfers_effects_and_closes_game(
     assert leaving not in game.players
     assert not leaving.websocket.closed
     assert leaving.hand == []
-    assert len(game.deck.deck) == initial_deck_size + 1
-    assert returned_card in game.deck.deck
+    assert len(game.deck.deck) == initial_deck_size - 1
+    assert returned_card in recipient.hand
     assert shuffled and returned_card in shuffled[0]
-    assert recipient.options.must_draw == 2
-    assert recipient.options.must_skip
-    assert game.get_current_player() is recipient
+    assert recipient.options.must_draw == 0
+    assert not recipient.options.must_skip
+    assert game.get_current_player() is not recipient
     assert game.game_id in manager.games
 
     await handler.handle_disconnect_game(third.user_id)

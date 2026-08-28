@@ -36,7 +36,7 @@ class LobbyHandlers:
         )
         self.lobby_manager.add_lobby(lobby)
 
-        message = f"You have created {lobby.name}"
+        message = f"You created {lobby.name}"
 
         await self.connection_manager.send_message(
             websocket=websocket,
@@ -71,7 +71,7 @@ class LobbyHandlers:
         if not lobby or lobby.in_game or lobby.is_full or (private_only and lobby.is_public):
             await self.connection_manager.send_message(
                 websocket=websocket,
-                message={"type": EventType.SHOW_ERROR.value, "msg": "The lobby doesn't exist or no slots."},
+                message={"type": EventType.SHOW_ERROR.value, "msg": "The lobby doesn't exist or is full."},
             )
             return
         if user.user_id in lobby.users:
@@ -82,7 +82,7 @@ class LobbyHandlers:
             return
 
         self.lobby_manager.add_user(lobby, user)
-        message = f"You have joined {lobby.name}"
+        message = f"You joined {lobby.name}"
         await self.connection_manager.send_message(
             websocket=websocket,
             message={
@@ -130,14 +130,14 @@ class LobbyHandlers:
         if not lobby or not lobby.is_host(host_id):
             raise LobbyActionError("Only the host can remove players.")
         if lobby.in_game:
-            raise LobbyActionError("Players cannot be removed after the game starts.")
+            raise LobbyActionError("Players can't be removed after the game starts.")
         if target_id == host_id:
-            raise LobbyActionError("The host cannot remove themselves.")
+            raise LobbyActionError("The host can't remove themselves.")
 
         async with lobby.disconnect_lock:
             target = lobby.get_user(target_id)
             if target is None:
-                raise LobbyActionError("This player is no longer in the lobby.")
+                raise LobbyActionError("This player isn't in the lobby.")
 
             self.lobby_manager.remove_user(lobby, target_id)
             if target.websocket is not None:
