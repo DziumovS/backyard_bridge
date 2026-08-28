@@ -36,6 +36,71 @@ async function joinConfiguredLobby(page, { hostName, code, isPublic, playerName 
   await expect(page.locator(".lobby-summary-name")).toHaveText(`${hostName}'s lobby`);
 }
 
+test("mobile game follows the visible viewport and keeps edge controls inside it", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true
+  });
+  const page = await context.newPage();
+  await createLobby(page, 1, { maxPlayers: 2 });
+  await page.getByRole("button", { name: "Start Game" }).click();
+  await expect(page.locator("#playerHand img")).not.toHaveCount(0);
+
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0b6b42");
+  await expect(page.locator('meta[name="apple-mobile-web-app-capable"]'))
+    .toHaveAttribute("content", "yes");
+  await expect(page.locator('meta[name="apple-mobile-web-app-status-bar-style"]'))
+    .toHaveAttribute("content", "black-translucent");
+
+  const inspectLayout = () => page.evaluate(() => {
+    const header = document.querySelector("header").getBoundingClientRect();
+    const title = document.querySelector("h1").getBoundingClientRect();
+    const currentCards = document.querySelector("#currentCards").getBoundingClientRect();
+    const playerHand = document.querySelector("#playerHand").getBoundingClientRect();
+    const turnText = document.querySelector("#turnText").getBoundingClientRect();
+    const cardTops = [...document.querySelectorAll("#playerHand .card")]
+      .map(card => card.getBoundingClientRect().top);
+    return {
+      viewportHeight: innerHeight,
+      bodyHeight: document.body.getBoundingClientRect().height,
+      htmlBackground: getComputedStyle(document.documentElement).backgroundColor,
+      htmlBackgroundImage: getComputedStyle(document.documentElement).backgroundImage,
+      bodyBackground: getComputedStyle(document.body).backgroundColor,
+      headerTop: header.top,
+      headerBottom: header.bottom,
+      titleHeight: title.height,
+      currentCardsBottom: currentCards.bottom,
+      handTop: playerHand.top,
+      handBottom: playerHand.bottom,
+      turnTextBottom: turnText.bottom,
+      firstCardTop: Math.min(...cardTops),
+    };
+  });
+
+  for (const height of [844, 650]) {
+    await page.setViewportSize({ width: 390, height });
+    await page.waitForTimeout(100);
+    const layout = await inspectLayout();
+    expect(layout.viewportHeight).toBe(height);
+    expect(layout.bodyHeight).toBeCloseTo(height, 0);
+    expect(layout.htmlBackground).toBe("rgb(11, 107, 66)");
+    expect(layout.htmlBackgroundImage).toContain("background.png");
+    expect(layout.htmlBackgroundImage).toContain("linear-gradient");
+    expect(layout.bodyBackground).toBe("rgba(0, 0, 0, 0)");
+    expect(layout.headerTop).toBeGreaterThanOrEqual(0);
+    expect(layout.headerBottom).toBeLessThanOrEqual(height);
+    expect(layout.titleHeight).toBeLessThanOrEqual(28);
+    expect(layout.currentCardsBottom).toBeLessThan(layout.handTop);
+    expect(layout.firstCardTop - layout.handTop).toBeGreaterThanOrEqual(15);
+    expect(layout.turnTextBottom).toBeLessThanOrEqual(layout.firstCardTop - 10);
+    expect(layout.handBottom).toBeLessThanOrEqual(height);
+    expect(layout.handBottom).toBeGreaterThanOrEqual(height - 2);
+  }
+
+  await context.close();
+});
+
 test("empty lobby browser uses stacked private search and compact refresh control", async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true

@@ -34,6 +34,68 @@ const reconnectWindowMs = 60000;
 const automaticReconnectMaxAttempts = 5;
 const automaticReconnectDelayMs = 1000;
 const storedSessionKey = "backyardBridgeSession";
+const orderedGameEventTypes = new Set([
+    "gd", "wt", "ft", "iib", "go", "godc", "apc", "adc", "gr",
+]);
+
+
+class GameEventQueue {
+    constructor() {
+        this.pending = [];
+        this.running = false;
+        this.generation = 0;
+    }
+
+    enqueue(task) {
+        return new Promise((resolve, reject) => {
+            const item = { task, resolve, reject };
+            if (this.running) {
+                this.pending.push(item);
+            } else {
+                this.run(item, this.generation);
+            }
+        });
+    }
+
+    run(item, generation) {
+        this.running = true;
+        let result;
+        try {
+            result = item.task();
+        } catch (error) {
+            this.finish(item, generation, error);
+            return;
+        }
+
+        if (result && typeof result.then === "function") {
+            result.then(
+                value => this.finish(item, generation, null, value),
+                error => this.finish(item, generation, error),
+            );
+        } else {
+            this.finish(item, generation, null, result);
+        }
+    }
+
+    finish(item, generation, error, value) {
+        if (error) item.reject(error);
+        else item.resolve(value);
+
+        if (generation !== this.generation) return;
+        const next = this.pending.shift();
+        if (next) this.run(next, generation);
+        else this.running = false;
+    }
+
+    reset() {
+        this.generation += 1;
+        this.running = false;
+        this.pending.splice(0).forEach(item => item.resolve());
+    }
+}
+
+
+const gameEventQueue = new GameEventQueue();
 
 
 const elements = {
@@ -218,7 +280,7 @@ function scheduleReconnect(phase) {
     if (Date.now() >= reconnectDeadline) {
         clearStoredSession();
         returnToMainPage();
-        void showError("Unable to reconnect within 60 seconds.", 5);
+        void showError("Couldn't reconnect within 60 seconds", 5);
         return;
     }
     if (automaticReconnectAttempts >= automaticReconnectMaxAttempts) {
@@ -300,7 +362,7 @@ function updateReconnectCountdown() {
         elements.reconnectGameWidget.style.display = "none";
         clearStoredSession();
         returnToMainPage();
-        void showError("The reconnect time has expired", 4);
+        void showError("Reconnect time expired", 4);
     }
 }
 
@@ -316,7 +378,7 @@ function syncReconnectDeadline() {
             closeReconnectGameWidget();
             clearStoredSession();
             returnToMainPage();
-            void showError("The game is no longer available", 4);
+            void showError("Game unavailable", 4);
             return;
         }
         if (data.type !== "rs" || !Number.isFinite(data.seconds)) return;
@@ -671,7 +733,7 @@ async function quickPlay() {
             await showError("No public lobbies are available yet.", 2);
         }
     } catch {
-        await showError("Unable to find a public lobby. Please try again.", 2);
+        await showError("Couldn't find a public lobby. Try again.", 2);
     } finally {
         elements.quickPlayButton.disabled = false;
     }
@@ -684,6 +746,7 @@ function initializeWebSocket(type, message, isReconnect = false) {
         ws.close(1000);
     }
 
+    gameEventQueue.reset();
     ws = new WebSocket(getWsBaseUrl(`/ws/lobby/${userId}`));
 
     ws.onopen = () => ws.send(JSON.stringify({type, ...message}));
@@ -702,6 +765,17 @@ function initializeWebSocket(type, message, isReconnect = false) {
 
 function handleWebSocketMessage(event) {
     const data = JSON.parse(event.data);
+
+    if (orderedGameEventTypes.has(data.type)) {
+        const pending = gameEventQueue.enqueue(() => processWebSocketMessage(data));
+        pending.catch(error => console.error("WebSocket message failed", error));
+        return pending;
+    }
+    return Promise.resolve(processWebSocketMessage(data));
+}
+
+
+function processWebSocketMessage(data) {
 
     switch (data.type) {
         case "sid":
@@ -761,13 +835,25 @@ function handleWebSocketMessage(event) {
             reconnectRequested = false;
             automaticReconnectAttempts = 0;
             ensureGamePlayers(data.players);
+            updateGameScores(data.players);
             reconnecting = false;
             reconnectDeadline = 0;
             storeSession();
             checkScoresRate(data.scores_rate, data.scores_rate_changed === true);
-            updatePlayerHand(data.hand, data.current_player, data.playable_cards, "current");
+            updatePlayerHand(
+                data.hand,
+                data.current_player && !data.automatic_action_pending,
+                data.playable_cards,
+                "current",
+            );
             updateOpponentData(data.players_hands);
-            updateCurrentCards(data.current_card, data.deck_len, data.chosen_suit, data.player_options);
+            updateCurrentCards(
+                data.current_card,
+                data.deck_len,
+                data.chosen_suit,
+                data.player_options,
+                data.automatic_action_pending,
+            );
             finishLoadingAnimation();
             break;
 
@@ -817,21 +903,21 @@ function handleWebSocketMessage(event) {
 
         case "godc":
             game_over = true;
-            drawCard();
-            break;
+            return drawCard();
 
         case "lg":
             leaveGame(data.player_id);
             break;
 
         case "apc":
-            playCard(data.card, "opponent");
-            break;
+            return playCard(data.card, "opponent");
 
         case "adc":
             change_player(data.current_player);
-            animateDrawCard("opponent");
-            break;
+            return animateDrawCard(
+                data.current_player === userId ? "current" : "opponent",
+                data.current_player,
+            );
 
         case "gr":
             reset_game(data.players_scores, data.player_scores);
@@ -884,6 +970,7 @@ function startGame() {
 function connectGameWebSocket(isReconnect = false) {
     if (ws) ws.onclose = null;
 
+    gameEventQueue.reset();
     ws = new WebSocket(getWsBaseUrl(`/ws/game/${lobbyId}/${userId}`));
 
     startLoadingAnimation(1, 1.5);
@@ -896,9 +983,7 @@ function connectGameWebSocket(isReconnect = false) {
         }
     };
 
-    ws.onmessage = function (event) {
-        handleWebSocketMessage(event);
-    };
+    ws.onmessage = handleWebSocketMessage;
     ws.onclose = () => {
         if (currentPhase === "game" && !leavingGame) {
             if (document.visibilityState !== "visible") {
@@ -926,7 +1011,6 @@ function setGameUI() {
     elements.currentCards.style.display = "flex";
     elements.playerContainer.style.display = "flex";
     elements.nameAndScores.style.flexDirection = "row";
-    elements.pS.innerHTML = "0";
     resetScoresRate();
     elements.playerScores.style.display = "block";
 
@@ -1095,7 +1179,7 @@ function updateUsers(users, isHostView, maxPlayers = lobbyMaxPlayers) {
         opponentScores.id = "opponentScores";
 
         const scoresName = document.createElement("p");
-        scoresName.innerHTML = "Scores:";
+        scoresName.innerHTML = "Score:";
         scoresName.style.marginRight = "3px";
 
         const oS = document.createElement("span");
@@ -1160,6 +1244,20 @@ function updateOpponentData(playersHands) {
             cardDiv.appendChild(cardImage);
             opponentHand.appendChild(cardDiv);
         }
+    });
+}
+
+
+function updateGameScores(players) {
+    players.forEach(player => {
+        if (typeof player.scores !== "number") return;
+
+        if (player.user_id === userId) {
+            elements.pS.textContent = player.scores;
+        }
+
+        const opponentScore = document.getElementById(`${player.user_id}_oS`);
+        if (opponentScore) opponentScore.textContent = player.scores;
     });
 }
 
@@ -1268,7 +1366,7 @@ function change_player(whoIsCurrent) {
 }
 
 
-function updateCurrentCards(currentCard, deckLen, chosenSuit, playerOptions) {
+function updateCurrentCards(currentCard, deckLen, chosenSuit, playerOptions, automaticActionPending = false) {
     elements.cardsLeft.textContent = deckLen;
 
     const oldImage = elements.rightCard.querySelector("img");
@@ -1284,9 +1382,12 @@ function updateCurrentCards(currentCard, deckLen, chosenSuit, playerOptions) {
     }
 
     elements.rightCard.appendChild(newRightCardImage);
-    setTimeout(() => {
+    if (automaticActionPending) {
+        setDefaultDrawCard();
+        setDefaultSkipTurn();
+    } else {
         checkCurrentPlayerOptions(playerOptions);
-    }, 50);
+    }
 }
 
 
@@ -1327,6 +1428,23 @@ function updateRightCard(card) {
 }
 
 
+function waitForCardTransition(cardElement, fallbackMs = 450) {
+    return new Promise((resolve) => {
+        let fallbackTimeout;
+        const finish = () => {
+            clearTimeout(fallbackTimeout);
+            cardElement.removeEventListener("transitionend", finish);
+            cardElement.removeEventListener("transitioncancel", finish);
+            resolve();
+        };
+
+        cardElement.addEventListener("transitionend", finish);
+        cardElement.addEventListener("transitioncancel", finish);
+        fallbackTimeout = setTimeout(finish, fallbackMs);
+    });
+}
+
+
 async function animatePlayedCard(cardElement) {
     const startRect = cardElement.getBoundingClientRect();
     const endRect = elements.rightCard.getBoundingClientRect();
@@ -1349,14 +1467,10 @@ async function animatePlayedCard(cardElement) {
         cardClone.style.height = "135px";
     }, 30);
 
-    await new Promise((resolve) => {
-        setTimeout(() => {
-            if (document.body.contains(cardClone)) {
-                cardClone.remove();
-            }
-            resolve();
-        }, 370);
-    });
+    await waitForCardTransition(cardClone);
+    if (document.body.contains(cardClone)) {
+        cardClone.remove();
+    }
 }
 
 
@@ -1373,7 +1487,7 @@ async function drawCard() {
 }
 
 
-async function animateDrawCard(whose) {
+async function animateDrawCard(whose, drawingPlayer = currentPlayer) {
     const startRect = elements.leftCard.getBoundingClientRect();
     const cardClone = elements.leftCard.querySelector("img").cloneNode(true);
 
@@ -1397,7 +1511,7 @@ async function animateDrawCard(whose) {
             cardClone.style.width = `${startRect.width}px`;
             cardClone.style.height = `${startRect.height}px`;
         } else {
-            const opponentContainer = document.getElementById(`${currentPlayer}_hand`);
+            const opponentContainer = document.getElementById(`${drawingPlayer}_hand`);
             const cardImg = opponentContainer.querySelector(".opponent_card");
             endRect = cardImg.getBoundingClientRect();
             centerX = endRect.left;
@@ -1410,14 +1524,10 @@ async function animateDrawCard(whose) {
         cardClone.style.top = `${centerY}px`;
     }, 30);
 
-    await new Promise((resolve) => {
-        setTimeout(() => {
-            if (document.body.contains(cardClone)) {
-                cardClone.remove();
-            }
-            resolve();
-        }, 370);
-    });
+    await waitForCardTransition(cardClone);
+    if (document.body.contains(cardClone)) {
+        cardClone.remove();
+    }
 }
 
 
@@ -1490,13 +1600,7 @@ function checkCurrentPlayerOptions(playerOptions) {
     setDefaultSkipTurn();
 
     if (currentPlayer === userId) {
-        if (playerOptions.must_draw) {
-            colorDrawCard();
-            setCardAction(elements.leftCard, drawCard, "Draw a card");
-        } else if (playerOptions.must_skip) {
-            colorSkipTurn();
-            setCardAction(elements.rightCard, skip_turn, "Skip turn");
-        } else {
+        if (!playerOptions.must_draw && !playerOptions.must_skip) {
             if (playerOptions.can_draw) {
                 colorDrawCard();
                 setCardAction(elements.leftCard, drawCard, "Draw a card");
@@ -1680,7 +1784,7 @@ function startLoadingAnimation() {
     }, 50);
     loadingFailureTimeout = setTimeout(() => {
         finishLoadingAnimation();
-        showError("Connection timed out. Please try again.", 5);
+        showError("Connection timed out. Try again.", 5);
     }, 20000);
 }
 
@@ -1699,6 +1803,7 @@ function finishLoadingAnimation() {
 /* v8 ignore next -- production-only guard for the test API */
 if (globalThis.__BACKYARD_BRIDGE_TEST__) {
     globalThis.__backyardBridge = {
+        GameEventQueue,
         elements,
         getWsBaseUrl,
         getHttpBaseUrl,
@@ -1735,6 +1840,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         updateUsers,
         kickUser,
         updateOpponentData,
+        updateGameScores,
         toggleStartButton,
         toggleAddBotButton,
         updatePlayerHand,
@@ -1743,6 +1849,7 @@ if (globalThis.__BACKYARD_BRIDGE_TEST__) {
         updateCurrentCards,
         playCard,
         updateRightCard,
+        waitForCardTransition,
         animatePlayedCard,
         drawCard,
         animateDrawCard,

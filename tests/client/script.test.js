@@ -343,7 +343,7 @@ describe("URLs, identity and lobby", () => {
     socket.onopen();
     expect(socket.sent[0]).toMatchObject({ lobby_id: "deadbe", private_only: true });
     app.handleWebSocketMessage({
-      data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or no slots." })
+      data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or is full." })
     });
     expect(app.elements.lobbyBrowserError.textContent).toBe("The private lobby was not found");
     expect(app.elements.lobbyControls.style.display).not.toBe("block");
@@ -361,7 +361,7 @@ describe("URLs, identity and lobby", () => {
     vi.useFakeTimers();
     await app.joinLobbyById("deadbe");
     app.handleWebSocketMessage({
-      data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or no slots." })
+      data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or is full." })
     });
     await vi.runAllTimersAsync();
     expect(app.elements.errorMessage.style.display).toBe("none");
@@ -578,7 +578,7 @@ describe("URLs, identity and lobby", () => {
     app.setState({ currentPhase: "game", reconnectDeadline: Date.now() - 1 });
     app.updateReconnectCountdown();
     expect(app.getState().currentPhase).toBe("home");
-    expect(app.elements.errorMessage.textContent).toBe("The reconnect time has expired");
+    expect(app.elements.errorMessage.textContent).toBe("Reconnect time expired");
 
     app.setState({ currentPhase: "game", reconnectDeadline: Date.now() - 1 });
     app.reconnectGame();
@@ -591,7 +591,7 @@ describe("URLs, identity and lobby", () => {
     app.syncReconnectDeadline();
     FakeWebSocket.instances.at(-1).onmessage({ data: JSON.stringify({ type: "se" }) });
     expect(app.getState().currentPhase).toBe("home");
-    expect(app.elements.errorMessage.textContent).toBe("The game is no longer available");
+    expect(app.elements.errorMessage.textContent).toBe("Game unavailable");
     await vi.runAllTimersAsync();
   });
 
@@ -940,6 +940,29 @@ describe("messages and game UI", () => {
     expect(document.getElementById("other_oS").textContent).toBe("20");
   });
 
+  test("renders negative scores for the current player and opponents", () => {
+    app.setState({ userId: "me" });
+    app.updateUsers(
+      [
+        { user_id: "me", user_name: "Me" },
+        { user_id: "other", user_name: "Other" }
+      ],
+      false
+    );
+
+    app.updateGameScores([
+      { user_id: "me", scores: -20 },
+      { user_id: "other", scores: -15 }
+    ]);
+
+    expect(app.elements.pS.textContent).toBe("-20");
+    expect(document.getElementById("other_oS").textContent).toBe("-15");
+
+    app.setGameUI();
+    expect(app.elements.pS.textContent).toBe("-20");
+    expect(document.getElementById("other_oS").textContent).toBe("-15");
+  });
+
   test.each([2, 3, 4])("renders and updates every client in a %i-player game", (playerCount) => {
     const users = Array.from({ length: playerCount }, (_, index) => ({
       user_id: index === 0 ? "me" : `player-${index + 1}`,
@@ -979,6 +1002,13 @@ describe("messages and game UI", () => {
     expect(app.elements.rightCard.querySelector("img").alt).toBe("♥");
     app.updateRightCard(hand[1]);
     expect(app.elements.rightCard.querySelector("img").alt).toBe("Q_♥");
+
+    app.setState({ currentPlayer: "me", userId: "me" });
+    const onlyDraw = { must_draw: 0, must_skip: false, can_draw: true, can_skip: false };
+    app.updateCurrentCards(hand[0], 20, null, onlyDraw, true);
+    expect(app.elements.leftCard.getAttribute("aria-disabled")).toBe("true");
+    app.updateCurrentCards(hand[0], 20, null, onlyDraw, false);
+    expect(app.elements.leftCard.getAttribute("aria-disabled")).toBe("false");
   });
 });
 
@@ -1056,17 +1086,18 @@ describe("turn actions and widgets", () => {
     app.firstTurn(jack);
   });
 
-  test("enables allowed draw and skip actions", () => {
+  test("leaves forced actions to the server and enables optional actions", () => {
     const socket = new FakeWebSocket("game");
     app.setState({ ws: socket, userId: "me", currentPlayer: "me" });
     app.checkCurrentPlayerOptions({ must_draw: 1, must_skip: false, can_draw: false, can_skip: false });
-    app.elements.leftCard.onclick();
+    expect(app.elements.leftCard.getAttribute("aria-disabled")).toBe("true");
     app.checkCurrentPlayerOptions({ must_draw: 0, must_skip: true, can_draw: false, can_skip: false });
+    expect(app.elements.rightCard.getAttribute("aria-disabled")).toBe("true");
+    app.checkCurrentPlayerOptions({ must_draw: 0, must_skip: false, can_draw: true, can_skip: true });
+    expect(app.elements.leftCard.getAttribute("aria-disabled")).toBe("false");
     expect(app.elements.rightCard.getAttribute("aria-disabled")).toBe("false");
-    expect(app.elements.rightCard.tabIndex).toBe(0);
     app.elements.rightCard.onclick();
     expect(socket.sent.at(-1).type).toBe("st");
-    app.checkCurrentPlayerOptions({ must_draw: 0, must_skip: false, can_draw: true, can_skip: true });
     app.checkCurrentPlayerOptions({ must_draw: 0, must_skip: false, can_draw: false, can_skip: false });
     app.setState({ currentPlayer: "other" });
     app.skip_turn();
@@ -1095,7 +1126,7 @@ describe("turn actions and widgets", () => {
     expect(app.elements.rightCard.hasAttribute("aria-label")).toBe(false);
   });
 
-  test("keeps Ace-forced skip highlighted after opponent animation finishes", async () => {
+  test("does not expose a duplicate client action for an Ace-forced skip", async () => {
     vi.useFakeTimers();
     const socket = new FakeWebSocket("game");
     const ace = { rank: "A", suit: "♠" };
@@ -1137,9 +1168,9 @@ describe("turn actions and widgets", () => {
     await vi.runAllTimersAsync();
 
     expect(app.elements.rightCard.querySelector("img").alt).toBe("A_♠");
-    expect(app.elements.rightCard.querySelector("img").classList.contains("highlighted-card-img")).toBe(true);
-    app.elements.rightCard.onclick();
-    expect(socket.sent.at(-1)).toEqual({ type: "st" });
+    expect(app.elements.rightCard.querySelector("img").classList.contains("highlighted-card-img")).toBe(false);
+    expect(app.elements.rightCard.getAttribute("aria-disabled")).toBe("true");
+    expect(socket.sent).toEqual([]);
   });
 
   test("shows bridge choices and restores cards", async () => {
@@ -1160,6 +1191,94 @@ describe("turn actions and widgets", () => {
 });
 
 describe("messages, rules, scores and loading", () => {
+  test("serializes animation and state messages before rendering a drawn card", async () => {
+    vi.useFakeTimers();
+    app.setState({ userId: "me", currentPlayer: "me" });
+    const players = [
+      { user_id: "me", user_name: "Me", scores: 0 },
+      { user_id: "other", user_name: "Other", scores: 0 }
+    ];
+    app.updateUsers(players, false);
+    app.updatePlayerHand(
+      [{ rank: "9", suit: "♠" }],
+      true,
+      [],
+      "current"
+    );
+
+    const animation = app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "adc", current_player: "me" })
+    });
+    const state = app.handleWebSocketMessage({
+      data: JSON.stringify({
+        type: "gd",
+        scores_rate: "x1",
+        hand: [{ rank: "9", suit: "♠" }, { rank: "Q", suit: "♥" }],
+        current_player: true,
+        playable_cards: [],
+        players,
+        players_hands: [
+          { player_id: "me", hand_len: 2 },
+          { player_id: "other", hand_len: 1 }
+        ],
+        current_card: { rank: "9", suit: "♦" },
+        deck_len: 20,
+        chosen_suit: null,
+        player_options: { must_draw: 0, must_skip: false, can_draw: false, can_skip: true },
+        is_host: false
+      })
+    });
+
+    expect(app.elements.playerHand.children).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(449);
+    expect(app.elements.playerHand.children).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.all([animation, state]);
+    expect(app.elements.playerHand.children).toHaveLength(2);
+  });
+
+  test("finishes card movement when the browser reports the transition end", async () => {
+    vi.useFakeTimers();
+    const card = document.createElement("img");
+    document.body.append(card);
+
+    const completed = app.waitForCardTransition(card, 1000);
+    card.dispatchEvent(new Event("transitionend"));
+    await completed;
+
+    expect(vi.getTimerCount()).toBe(0);
+    card.remove();
+  });
+
+  test("game event queue drains, resets, and propagates task failures", async () => {
+    const queue = new app.GameEventQueue();
+    const order = [];
+    let release;
+    const active = queue.enqueue(() => new Promise(resolve => {
+      release = () => {
+        order.push("active");
+        resolve();
+      };
+    }));
+    const cancelled = queue.enqueue(() => order.push("cancelled"));
+
+    queue.reset();
+    await cancelled;
+    release();
+    await active;
+    expect(order).toEqual(["active"]);
+
+    await expect(queue.enqueue(() => {
+      throw new Error("sync failure");
+    })).rejects.toThrow("sync failure");
+    await expect(queue.enqueue(() => Promise.reject(new Error("async failure"))))
+      .rejects.toThrow("async failure");
+
+    await queue.enqueue(() => order.push("first"));
+    await queue.enqueue(async () => order.push("second"));
+    expect(order).toEqual(["active", "first", "second"]);
+  });
+
   test("runs input listeners and remaining message variants", async () => {
     vi.useFakeTimers();
     app.elements.joinLobbyInput.value = "abcdef";
@@ -1217,7 +1336,10 @@ describe("messages, rules, scores and loading", () => {
         hand: [],
         current_player: true,
         playable_cards: [],
-        players: [{ user_id: "me", user_name: "Me" }, { user_id: "other", user_name: "Other" }],
+        players: [
+          { user_id: "me", user_name: "Me", scores: -20 },
+          { user_id: "other", user_name: "Other", scores: -15 }
+        ],
         players_hands: [{ player_id: "me", hand_len: 0 }, { player_id: "other", hand_len: 1 }],
         current_card: { rank: "9", suit: "♠" },
         deck_len: 20,
@@ -1226,9 +1348,13 @@ describe("messages, rules, scores and loading", () => {
         is_host: true
       })
     });
+    expect(app.elements.pS.textContent).toBe("-20");
+    expect(document.getElementById("other_oS").textContent).toBe("-15");
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "wt", msg: "Turn", current_player: "other" }) });
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "ft", current_card: { rank: "9", suit: "♠" } }) });
     app.handleWebSocketMessage({ data: JSON.stringify({ type: "adc", current_player: "other" }) });
+    await vi.runAllTimersAsync();
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "adc", current_player: "me" }) });
     await vi.runAllTimersAsync();
   });
 
@@ -1298,7 +1424,7 @@ describe("messages, rules, scores and loading", () => {
     app.startLoadingAnimation();
     await vi.advanceTimersByTimeAsync(20000);
     expect(document.getElementById("overlay").style.display).toBe("none");
-    expect(app.elements.errorMessage.innerHTML).toBe("Connection timed out. Please try again.");
+    expect(app.elements.errorMessage.innerHTML).toBe("Connection timed out. Try again.");
   });
 
   test("repairs an incomplete player list from authoritative game data", () => {

@@ -1,3 +1,10 @@
+html {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0)), url("../background.png");
+    background-color: #0b6b42;
+}
+
 header {
     display: flex;
     justify-content: space-between;
@@ -30,13 +37,30 @@ h2, #welcomeMessage {
 }
 
 body {
-    background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0)), url("../background.png");
+    background: transparent;
     margin: 0;
-    padding: 0;
+    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+        env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     height: 100vh;
+    min-height: 100vh;
     overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+    html,
+    body {
+        height: 100dvh;
+        min-height: 100dvh;
+    }
+
+    .rules-widget-window, .game-over-widget-window, .create-lobby-window, .lobby-modal-window,
+    .reconnect-game-window, .leave-game-confirm-window,
+    #overlay {
+        height: 100dvh;
+    }
 }
 
 p {
@@ -550,6 +574,9 @@ button:active {
     left: 0;
     width: 100vw;
     height: 100vh;
+    box-sizing: border-box;
+    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+        env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
     background-color: rgba(0, 0, 0, 0.7);
     justify-content: center;
     align-items: center;
@@ -799,7 +826,7 @@ button:active {
 
 #playerContainer {
     position: fixed;
-    bottom: 0;
+    bottom: env(safe-area-inset-bottom, 0);
     width: 100%;
     display: none;
     flex-direction: column;
@@ -840,7 +867,7 @@ button:active {
     overflow: hidden;
     height: 195px;
     position: fixed;
-    bottom: 0;
+    bottom: env(safe-area-inset-bottom, 0);
 }
 
 .card {
@@ -1058,6 +1085,9 @@ footer p {
     left: 0;
     width: 100%;
     height: 100%;
+    box-sizing: border-box;
+    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+        env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
     background-color: rgba(0, 0, 0, 0.95);
     display: none;
     align-items: center;
@@ -1102,6 +1132,16 @@ footer p {
         height: 175px;
     }
 
+    #playerContainer {
+        height: 215px;
+        padding-bottom: 0;
+    }
+
+    #playerHand {
+        height: 190px;
+        padding-bottom: 2px;
+    }
+
     .card,
     .current-card {
         width: 80px;
@@ -1114,6 +1154,34 @@ footer p {
 }
 
 @media (max-width: 480px) {
+    header {
+        gap: 4px;
+    }
+
+    h1 {
+        margin: 6px 0 6px 4px;
+        font-size: clamp(18px, 5vw, 22px);
+        white-space: nowrap;
+    }
+
+    .header-actions {
+        gap: 5px;
+        margin-right: 2px;
+    }
+
+    #rulesButton {
+        width: 78px;
+        height: 32px;
+        margin: 6px 0;
+        font-size: 14px;
+    }
+
+    #leaveActiveGameButton {
+        width: 92px;
+        height: 32px;
+        font-size: 13px;
+    }
+
     .preLobbyControls {
         margin-top: 3vh;
     }

@@ -4,6 +4,11 @@
         <meta charset="UTF-8">
         <meta name="viewport"
               content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+        <meta name="theme-color" content="#0b6b42">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="Backyard Bridge">
 
         <meta http-equiv="X-UA-Compatible" content="ie=edge">
         <link href="{{ url_for('static', path='/css/styles' ~ asset_suffix ~ '.css') }}?v=2" rel="stylesheet">
@@ -38,7 +43,7 @@
 
                     <div class="playerScore">
                         <p id="scores" style="display: none;">
-                            Your scores:
+                            Your score:
                             <span id="pS"></span>
                         </p>
                     </div>
@@ -96,7 +101,7 @@
                         </div>
                         <div class="lobby-type-option">
                             <button id="createPrivateLobbyButton" type="button">Private</button>
-                            <p>Players can join only with code</p>
+                            <p>Code required to join</p>
                         </div>
                     </div>
 
@@ -153,7 +158,7 @@
 
                 <div class="betweenCurrentCards">
                     <div id="scores-rate-now">
-                        <p>Scores rate:</p>
+                        <p>Score multiplier:</p>
                         <p class="scores-rate" id="scoresRate"></p>
                     </div>
                     <div id="cards-left">
