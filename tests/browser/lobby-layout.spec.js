@@ -375,6 +375,10 @@ test("refreshing an active game asks before reconnecting", async ({ browser }) =
   await expect(page.locator("#rightCard img")).toHaveCount(1);
   await expect(page.locator("#cardsLeft")).not.toHaveText("");
   await expect(page.locator(".opponent_hand")).toHaveCount(2);
+  await expect(page.locator("#usersHeader")).toBeVisible();
+  await expect(page.locator(".player-entry:visible")).toHaveCount(1);
+  await expect(page.locator(".opponent_hand:visible")).toHaveCount(1);
+  await expect(page.locator(".opponentScores:visible")).toHaveCount(1);
   await expect(page.locator("#welcomeMessage")).toBeHidden();
   await expect(page.locator("#homeLobbyActions")).toBeHidden();
   await expect(page.locator("#nameForm")).toBeHidden();
@@ -425,6 +429,10 @@ test("mobile game waits in the background and reconnects silently on return", as
   });
   await expect(page.locator("#currentCards")).toBeVisible();
   await expect(page.locator("#homeLobbyActions")).toBeHidden();
+  await expect(page.locator("#usersHeader")).toBeVisible();
+  await expect(page.locator(".player-entry:visible")).toHaveCount(1);
+  await expect(page.locator(".opponent_hand:visible")).toHaveCount(1);
+  await expect(page.locator(".opponentScores:visible")).toHaveCount(1);
   await page.evaluate(() => {
     const socket = globalThis.__backyardBridge.getState().ws;
     const send = socket.send.bind(socket);
@@ -434,13 +442,20 @@ test("mobile game waits in the background and reconnects silently on return", as
       send(payload);
     };
   });
-  const resumedAction = page.locator(
-    '#leftCard[aria-disabled="false"], #rightCard[aria-disabled="false"]'
+  const pendingJackSuit = page.locator(
+    '#jack-widget [role="button"][aria-disabled="false"]'
   ).first();
-  await expect(resumedAction).toBeVisible({ timeout: 10_000 });
-  await resumedAction.click();
+  if (await pendingJackSuit.isVisible()) {
+    await pendingJackSuit.click();
+  } else {
+    const resumedAction = page.locator(
+      '#leftCard[aria-disabled="false"], #rightCard[aria-disabled="false"]'
+    ).first();
+    await expect(resumedAction).toBeVisible({ timeout: 10_000 });
+    await resumedAction.click();
+  }
   await expect.poll(() => page.evaluate(() => globalThis.__messagesAfterReconnect))
-    .toContainEqual(expect.objectContaining({ type: expect.stringMatching(/^(dc|st)$/) }));
+    .toContainEqual(expect.objectContaining({ type: expect.stringMatching(/^(pc|dc|st)$/) }));
   await context.close();
 });
 

@@ -1015,7 +1015,9 @@ function setGameUI() {
     elements.playerScores.style.display = "block";
 
     elements.usersHeader.style.fontSize = "12px";
+    elements.usersHeader.style.display = "block";
     elements.usersHeader.classList.remove("lobby-users-header");
+    elements.usersList.style.display = "flex";
     elements.usersList.style.fontSize = "12px";
     elements.usersList.style.flexDirection = "row";
     document.querySelectorAll(".kick-player-button").forEach(button => button.remove());
@@ -1730,6 +1732,7 @@ function isItBridge(card) {
 
         elements.rightCard.querySelector("img").src = "/static/cards/continue.png";
         elements.rightCard.querySelector("img").alt = "continue";
+        colorSkipTurn();
 
         setCardAction(elements.rightCard, () => {
             skip_turn();

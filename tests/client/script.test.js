@@ -228,7 +228,11 @@ describe("URLs, identity and lobby", () => {
     );
     expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(1);
     expect(app.elements.usersList.querySelector(".host-label").textContent).toBe("HOST");
+    app.elements.usersHeader.style.display = "none";
+    app.elements.usersList.style.display = "none";
     app.setGameUI();
+    expect(app.elements.usersHeader.style.display).toBe("block");
+    expect(app.elements.usersList.style.display).toBe("flex");
     expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(0);
     expect(app.elements.usersHeader.classList.contains("lobby-users-header")).toBe(false);
     expect(app.elements.usersList.querySelector(".host-label")).toBeNull();
@@ -1180,6 +1184,10 @@ describe("turn actions and widgets", () => {
     app.setState({ ws: socket, userId: "me", currentPlayer: "me" });
     app.isItBridge(card);
     await vi.runAllTimersAsync();
+    expect(app.elements.leftCard.querySelector("img").classList.contains("highlighted-card-img")).toBe(true);
+    expect(app.elements.rightCard.querySelector("img").classList.contains("highlighted-card-img")).toBe(true);
+    expect(app.elements.leftCard.getAttribute("aria-disabled")).toBe("false");
+    expect(app.elements.rightCard.getAttribute("aria-disabled")).toBe("false");
     app.elements.leftCard.onclick();
     expect(socket.sent.at(-1).type).toBe("go");
     app.isItBridge(card);
