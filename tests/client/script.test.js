@@ -356,8 +356,14 @@ describe("URLs, identity and lobby", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(app.elements.lobbyBrowserError.textContent).toBe("");
 
+    app.elements.joinLobbyInput.value = "deadbe";
+    await app.joinLobby();
     app.closeLobbyBrowser();
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or is full." })
+    });
     expect(app.elements.lobbyBrowserWidget.style.display).toBe("none");
+    expect(app.elements.lobbyBrowserError.textContent).toBe("");
     vi.useRealTimers();
   });
 
@@ -404,8 +410,10 @@ describe("URLs, identity and lobby", () => {
     app.openLobbyBrowser();
     await Promise.resolve();
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(app.elements.refreshLobbiesButton.disabled).toBe(false);
     await vi.advanceTimersByTimeAsync(4000);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(app.elements.refreshLobbiesButton.disabled).toBe(false);
     app.closeLobbyBrowser();
     await vi.advanceTimersByTimeAsync(8000);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
@@ -1289,9 +1297,12 @@ describe("messages, rules, scores and loading", () => {
 
   test("runs input listeners and remaining message variants", async () => {
     vi.useFakeTimers();
-    app.elements.joinLobbyInput.value = "abcdef";
+    app.elements.joinLobbyInput.value = "zzzzzz";
     app.elements.joinLobbyInput.dispatchEvent(new Event("input"));
     expect(app.elements.joinLobbyButton.disabled).toBe(false);
+    app.elements.joinLobbyInput.value = "short";
+    app.elements.joinLobbyInput.dispatchEvent(new Event("change"));
+    expect(app.elements.joinLobbyButton.disabled).toBe(true);
     app.elements.nameInput.value = "Name";
     app.elements.nameInput.dispatchEvent(new Event("input"));
     expect(document.getElementById("changeName").disabled).toBe(false);

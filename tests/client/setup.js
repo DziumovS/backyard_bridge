@@ -14,7 +14,7 @@ document.body.innerHTML = `
   <div id="lobby-browser-widget"><button id="closeLobbyBrowserWidget"></button>
     <p id="availableLobbiesEmpty">No lobbies are available yet</p>
     <div id="lobbyBrowserError"></div><input id="lobbyInput">
-    <button id="joinLobbyButton"></button><button id="refreshLobbiesButton"></button>
+    <button id="refreshLobbiesButton"></button><button id="joinLobbyButton"></button>
     <div id="availableLobbiesList"></div></div>
   <div id="reconnect-game-widget"><span id="reconnectGameTimer"></span>
     <button id="reconnectGameButton"></button><button id="leaveDisconnectedGameButton"></button></div>

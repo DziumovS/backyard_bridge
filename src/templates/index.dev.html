@@ -11,7 +11,7 @@
         <meta name="apple-mobile-web-app-title" content="Backyard Bridge">
 
         <meta http-equiv="X-UA-Compatible" content="ie=edge">
-        <link href="{{ url_for('static', path='/css/styles' ~ asset_suffix ~ '.css') }}?v=2" rel="stylesheet">
+        <link href="{{ url_for('static', path='/css/styles' ~ asset_suffix ~ '.css') }}?v=19" rel="stylesheet">
         <link id="favicon" rel="icon" type="image/x-icon" href="static/favicon.ico">
         <title>Backyard Bridge</title>
     </head>
@@ -90,8 +90,10 @@
             <div id="create-lobby-widget" class="create-lobby-window" role="dialog" aria-modal="true"
                  aria-labelledby="createLobbyTitle">
                 <div class="create-lobby-content">
-                    <button id="closeCreateLobbyWidget" class="close-widget" type="button"
-                            aria-label="Close create lobby dialog">&times;</button>
+                    <button id="closeCreateLobbyWidget" class="close-rules-widget create-lobby-close" type="button"
+                            aria-label="Close create lobby dialog">
+                        <span class="create-lobby-close-icon" aria-hidden="true">&times;</span>
+                    </button>
                     <h2 id="createLobbyTitle">Create Lobby</h2>
 
                     <div class="lobby-type-options">
@@ -191,7 +193,8 @@
             <div id="rules-widget" class="rules-widget-window">
                 <div class="rules-widget-content">
                     <div class="rules-widget-header">
-                        <span id="closeRulesWidget" class="close-rules-widget">&times;</span>
+                        <button id="closeRulesWidget" class="close-rules-widget rules-close" type="button"
+                                aria-label="Close rules">&times;</button>
                     </div>
                     <div class="rules-column">
                         <p></p>
@@ -244,7 +247,7 @@
             </div>
         </footer>
 
-    <script src="{{ url_for('static', path='/js/script' ~ asset_suffix ~ '.js') }}?v=2"></script>
+    <script src="{{ url_for('static', path='/js/script' ~ asset_suffix ~ '.js') }}?v=19"></script>
 
     </body>
 

@@ -167,7 +167,7 @@ test("empty lobby browser uses stacked private search and compact refresh contro
       refreshHeight: refreshBox.height,
       refreshRadius: getComputedStyle(refresh).borderRadius,
       refreshBelowInput: refreshBox.top > codeBox.bottom,
-      joinOnInputLine: Math.abs(joinBox.top - codeBox.top) < 2,
+      joinOnInputLine: Math.abs((joinBox.top + joinBox.bottom) / 2 - (codeBox.top + codeBox.bottom) / 2) < 2,
       inputJoinGap: joinBox.left - codeBox.right,
       codeWidth: codeBox.width,
       nameWidth: nameBox.width,
@@ -179,11 +179,11 @@ test("empty lobby browser uses stacked private search and compact refresh contro
   expect(layout.refreshWeight).toBe("400");
   expect(layout.refreshWidth).toBe(68);
   expect(layout.refreshHeight).toBe(22);
-  expect(layout.refreshRadius).toBe("12px");
+  expect(layout.refreshRadius).toBe("20px");
   expect(layout.refreshBelowInput).toBe(true);
   expect(layout.joinOnInputLine).toBe(true);
-  expect(layout.inputJoinGap).toBeGreaterThanOrEqual(12);
-  expect(layout.codeWidth).toBeGreaterThan(layout.nameWidth);
+  expect(layout.inputJoinGap).toBeCloseTo(5, 0);
+  expect(layout.codeWidth).toBeLessThan(layout.nameWidth * 1.2);
   const mobileInput = page.locator("#lobbyInput");
   const mobileJoin = page.locator("#joinLobbyButton");
   const mobileInputWidth = await mobileInput.evaluate(element => element.getBoundingClientRect().width);
@@ -211,6 +211,68 @@ test("empty lobby browser uses stacked private search and compact refresh contro
   await context.close();
 });
 
+test("the rules dialog keeps its desktop size and closes on mobile", async ({ browser }) => {
+  const desktopContext = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+  const desktop = await desktopContext.newPage();
+  await desktop.goto("/");
+
+  await desktop.getByRole("button", { name: "Rules" }).click();
+  await expect(desktop.locator("#rules-widget")).toBeVisible();
+  const desktopRulesWidth = await desktop.locator(".rules-widget-content").evaluate(element =>
+    element.getBoundingClientRect().width
+  );
+  expect(desktopRulesWidth).toBe(720);
+  await desktopContext.close();
+
+  const mobileContext = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
+  });
+  const mobile = await mobileContext.newPage();
+  await mobile.goto("/");
+  await mobile.getByRole("button", { name: "Rules" }).tap();
+  await expect(mobile.locator("#rules-widget")).toBeVisible();
+  await mobile.getByRole("button", { name: "Close rules" }).tap();
+  await expect(mobile.locator("#rules-widget")).toBeHidden();
+  await mobileContext.close();
+});
+
+for (const device of ["desktop", "mobile"]) {
+  test(`the create-lobby close control is fully clickable on ${device}`, async ({ browser }) => {
+    const isMobile = device === "mobile";
+    const context = await browser.newContext({
+      viewport: isMobile ? { width: 390, height: 844 } : { width: 1200, height: 800 },
+      hasTouch: isMobile,
+      isMobile,
+    });
+    const page = await context.newPage();
+    await page.goto("/");
+
+    for (const point of ["top-left", "top-right", "center", "bottom-left", "bottom-right"]) {
+      const createButton = page.getByRole("button", { name: "Create Lobby", exact: true });
+      if (isMobile) await createButton.tap();
+      else await createButton.click();
+
+      const closeBox = await page.getByRole("button", { name: "Close create lobby dialog" }).boundingBox();
+      const x = point.endsWith("left")
+        ? closeBox.x + 2
+        : point.endsWith("right")
+          ? closeBox.x + closeBox.width - 2
+          : closeBox.x + closeBox.width / 2;
+      const y = point.startsWith("top")
+        ? closeBox.y + 2
+        : point.startsWith("bottom")
+          ? closeBox.y + closeBox.height - 2
+          : closeBox.y + closeBox.height / 2;
+
+      if (isMobile) await page.touchscreen.tap(x, y);
+      else await page.mouse.click(x, y);
+      await expect(page.locator("#create-lobby-widget")).toBeHidden();
+    }
+
+    await context.close();
+  });
+}
+
 test("desktop private code field grows in place and releases focus after Join", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
   const page = await context.newPage();
@@ -235,9 +297,18 @@ test("desktop private code field grows in place and releases focus after Join", 
   await page.getByRole("button", { name: "Join Lobby" }).click();
   const input = page.locator("#lobbyInput");
   const join = page.locator("#joinLobbyButton");
+  const controlHeights = await page.locator(".private-code-join").evaluate(container => ({
+    input: container.querySelector("#lobbyInput").getBoundingClientRect().height,
+    join: container.querySelector("#joinLobbyButton").getBoundingClientRect().height,
+  }));
+  expect(controlHeights.join).toBe(controlHeights.input);
+  expect(controlHeights.join).toBe(26);
   const before = await input.evaluate(element => element.getBoundingClientRect().toJSON());
   const joinLeftBefore = await join.evaluate(element => element.getBoundingClientRect().left);
-  await input.click();
+  await page.mouse.click(before.x + before.width / 2, before.y + 2);
+  await expect(input).toBeFocused();
+  await page.keyboard.type("zzzzzz");
+  await expect(join).toBeEnabled();
   await page.waitForTimeout(250);
   const focused = await input.evaluate(element => {
     const box = element.getBoundingClientRect();
@@ -257,6 +328,92 @@ test("desktop private code field grows in place and releases focus after Join", 
   await input.fill("deadbe");
   await page.getByRole("button", { name: "Join", exact: true }).click();
   await expect(input).not.toBeFocused();
+  await expect(page.locator("#lobbyBrowserError")).toHaveText("The private lobby was not found");
+  const inputAfterError = await input.boundingBox();
+  await page.mouse.click(inputAfterError.x + inputAfterError.width / 2, inputAfterError.y + 2);
+  await expect(input).toBeFocused();
+  await page.keyboard.type("zzzzzz");
+  await expect(join).toBeEnabled();
+  const activeJoinBox = await join.boundingBox();
+  await page.mouse.click(
+    activeJoinBox.x + activeJoinBox.width / 2,
+    activeJoinBox.y + activeJoinBox.height - 2
+  );
+  await expect(input).not.toBeFocused();
+  await expect(page.locator("#lobbyBrowserError")).toHaveText("The private lobby was not found");
+  const close = page.locator("#closeLobbyBrowserWidget");
+  const closeBox = await close.boundingBox();
+  await page.mouse.click(closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height - 2);
+  await expect(page.locator("#lobby-browser-widget")).toBeHidden();
+  await context.close();
+});
+
+for (const lobbyType of ["Public", "Private"]) {
+  test(`${lobbyType} accepts clicks across the full visible create-lobby button`, async ({ browser }) => {
+    for (const viewport of [{ width: 1200, height: 800 }, { width: 700, height: 450 }]) {
+      const context = await browser.newContext({ viewport });
+      const page = await context.newPage();
+      await page.goto("/");
+      await page.getByRole("button", { name: "Create Lobby", exact: true }).click();
+      const button = page.getByRole("button", { name: lobbyType, exact: true });
+      const hitTargets = await button.evaluate(element => {
+        const box = element.getBoundingClientRect();
+        return [[0.5, 0.03], [0.5, 0.97], [0.03, 0.5], [0.97, 0.5], [0.5, 0.5]].map(([x, y]) => {
+          const target = document.elementFromPoint(box.left + box.width * x, box.top + box.height * y);
+          return target?.id;
+        });
+      });
+      expect(hitTargets.every(id => id === `create${lobbyType}LobbyButton`)).toBe(true);
+      const box = await button.boundingBox();
+      await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+      await expect(page.locator("#create-lobby-widget")).toBeHidden();
+      await expect(page.locator(".lobby-summary-name")).toBeVisible();
+      await context.close();
+    }
+  });
+
+  test(`${lobbyType} accepts taps across the full visible create-lobby button on mobile`, async ({ browser }) => {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
+    });
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.getByRole("button", { name: "Create Lobby", exact: true }).tap();
+    const button = page.getByRole("button", { name: lobbyType, exact: true });
+    const box = await button.boundingBox();
+    await page.touchscreen.tap(box.x + box.width - 2, box.y + box.height / 2);
+    await expect(page.locator("#create-lobby-widget")).toBeHidden();
+    await expect(page.locator(".lobby-summary-name")).toBeVisible();
+    await context.close();
+  });
+}
+
+test("mobile private code and Join accept taps across their full visible areas", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Join Lobby", exact: true }).tap();
+
+  const input = page.locator("#lobbyInput");
+  const inputBox = await input.boundingBox();
+  await page.touchscreen.tap(inputBox.x + inputBox.width / 2, inputBox.y + 2);
+  await expect(input).toBeFocused();
+  await page.keyboard.type("deadbe");
+
+  const join = page.getByRole("button", { name: "Join", exact: true });
+  await expect(join).toBeEnabled();
+  const joinBox = await join.boundingBox();
+  await page.touchscreen.tap(joinBox.x + joinBox.width / 2, joinBox.y + joinBox.height - 2);
+  await expect(page.locator("#lobbyBrowserError")).toHaveText("The private lobby was not found");
+
+  const inputAfterError = await input.boundingBox();
+  await page.touchscreen.tap(
+    inputAfterError.x + inputAfterError.width / 2,
+    inputAfterError.y + inputAfterError.height - 2
+  );
+  await expect(input).toBeFocused();
   await context.close();
 });
 
@@ -264,6 +421,7 @@ test("lobby rows share the longest width and align kick controls", async ({ brow
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
   const page = await context.newPage();
   await createLobby(page, 3);
+  expect(await page.locator(".buttonContainer").evaluate(element => getComputedStyle(element).gap)).toBe("12px");
   await expect(page.locator(".host-label")).toHaveCount(1);
   await expect(page.locator(".host-label")).toHaveText("HOST");
 

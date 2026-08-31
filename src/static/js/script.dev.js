@@ -160,9 +160,13 @@ elements.wsId.textContent = userName;
 elements.nameInput.placeholder = userName;
 
 
-elements.joinLobbyInput.addEventListener("input", function () {
-    elements.joinLobbyButton.disabled = !/^[0-9a-f]{6}$/i.test(elements.joinLobbyInput.value.trim());
-});
+function updatePrivateLobbyJoinState() {
+    elements.joinLobbyButton.disabled = elements.joinLobbyInput.value.trim().length !== 6;
+}
+
+
+elements.joinLobbyInput.addEventListener("input", updatePrivateLobbyJoinState);
+elements.joinLobbyInput.addEventListener("change", updatePrivateLobbyJoinState);
 
 elements.nameInput.addEventListener("input", function () {
     const inputText = elements.nameInput.value.trim();
@@ -562,7 +566,7 @@ function openLobbyBrowser() {
     elements.joinLobbyInput.value = "";
     elements.joinLobbyButton.disabled = true;
     elements.lobbyBrowserWidget.style.display = "flex";
-    void refreshAvailableLobbies();
+    void refreshAvailableLobbies(false);
     startLobbyAutoRefresh();
 }
 
@@ -692,16 +696,18 @@ function renderAvailableLobbies(lobbies) {
 }
 
 
-async function refreshAvailableLobbies() {
-    elements.refreshLobbiesButton.disabled = true;
+async function refreshAvailableLobbies(showButtonState = true) {
+    if (showButtonState) elements.refreshLobbiesButton.disabled = true;
     try {
         const response = await fetch("/lobbies");
         renderAvailableLobbies(await response.json());
     } catch {
         renderAvailableLobbies([]);
     } finally {
-        elements.refreshLobbiesButton.disabled = false;
-        setTimeout(() => elements.refreshLobbiesButton.blur(), 0);
+        if (showButtonState) {
+            elements.refreshLobbiesButton.disabled = false;
+            setTimeout(() => elements.refreshLobbiesButton.blur(), 0);
+        }
     }
 }
 
@@ -710,7 +716,7 @@ function startLobbyAutoRefresh() {
     stopLobbyAutoRefresh();
     lobbyRefreshInterval = setInterval(() => {
         if (elements.lobbyBrowserWidget.style.display === "flex") {
-            void refreshAvailableLobbies();
+            void refreshAvailableLobbies(false);
         }
     }, 4000);
 }
@@ -881,8 +887,9 @@ function processWebSocketMessage(data) {
                 returnToMainPage();
             }
             if (privateJoinPending) {
-                showLobbyBrowserError("The private lobby was not found");
-                elements.lobbyBrowserWidget.style.display = "flex";
+                if (elements.lobbyBrowserWidget.style.display === "flex") {
+                    showLobbyBrowserError("The private lobby was not found");
+                }
                 privateJoinPending = false;
             } else {
                 showError(data.msg, 2);
