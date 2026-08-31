@@ -72,6 +72,8 @@ async def websocket_game(websocket: WebSocket, game_id: str, user_id: str):
             game,
             chosen_suit=game.chosen_suit,
         )
+        async with game.action_lock:
+            await game_manager.run_automatic_actions(game)
     elif not await game.wait_until_all_ready():
         await game_manager.abort_startup(game, websocket)
         return

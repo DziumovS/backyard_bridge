@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from main import app
+from src.deck.models import Card
 from src.game.models import Game
 from src.game.errors import InvalidAction
 from src.game.router import websocket_game
@@ -903,9 +904,13 @@ async def test_lobby_router_removes_lobby_on_unexpected_disconnect():
 async def test_started_game_router_restores_current_state(game):
     game_manager.create_game(game)
     game.has_started = True
+    game.opening_turn_pending = False
     player = game.players[0]
     player.websocket = None
-    game.current_card = player.hand[0]
+    player.hand = [Card("Q", "♥")]
+    game.current_card = Card("9", "♠")
+    game.deck.deck = [Card("K", "♠")]
+    game.deck.bounce_deck = []
     websocket = FakeWebSocket([
         {"type": "auth", "token": player.session_token},
         WebSocketDisconnect(1001),
@@ -915,6 +920,14 @@ async def test_started_game_router_restores_current_state(game):
 
     assert websocket.sent[0]["type"] == "wt"
     assert websocket.sent[1]["type"] == "gd"
+    assert websocket.sent[1]["automatic_action_pending"] is True
+    assert player.hand_to_dict() == [
+        {"rank": "Q", "suit": "♥"},
+        {"rank": "K", "suit": "♠"},
+    ]
+    assert any(message["type"] == "adc" for message in websocket.sent)
+    assert websocket.sent[-1]["type"] == "gd"
+    assert websocket.sent[-1]["automatic_action_pending"] is False
 
 
 @pytest.mark.anyio
