@@ -101,6 +101,45 @@ test("mobile game follows the visible viewport and keeps edge controls inside it
   await context.close();
 });
 
+test("mobile game has a non-overlapping landscape layout", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    hasTouch: true,
+    isMobile: true
+  });
+  const page = await context.newPage();
+  await createLobby(page, 1, { maxPlayers: 2 });
+  await page.getByRole("button", { name: "Start Game" }).click();
+  await expect(page.locator("#playerHand img")).not.toHaveCount(0);
+
+  const layout = await page.evaluate(() => {
+    const box = selector => document.querySelector(selector).getBoundingClientRect();
+    const opponentBoxes = [...document.querySelectorAll(".player-entry")]
+      .filter(element => getComputedStyle(element).display !== "none")
+      .map(element => element.getBoundingClientRect());
+    const handCards = [...document.querySelectorAll("#playerHand .card")]
+      .map(element => element.getBoundingClientRect());
+    return {
+      viewport: { width: innerWidth, height: innerHeight },
+      scrollWidth: document.documentElement.scrollWidth,
+      header: box("header"),
+      current: box("#currentCards"),
+      hand: box("#playerHand"),
+      opponentsBottom: Math.max(...opponentBoxes.map(item => item.bottom)),
+      firstCardTop: Math.min(...handCards.map(item => item.top)),
+      lastCardBottom: Math.max(...handCards.map(item => item.bottom)),
+    };
+  });
+
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewport.width);
+  expect(layout.header.top).toBeGreaterThanOrEqual(0);
+  expect(layout.opponentsBottom).toBeLessThan(layout.current.top);
+  expect(layout.current.bottom).toBeLessThan(layout.firstCardTop);
+  expect(layout.lastCardBottom).toBeLessThanOrEqual(layout.viewport.height);
+  expect(layout.hand.bottom).toBeLessThanOrEqual(layout.viewport.height);
+  await context.close();
+});
+
 test("empty lobby browser uses stacked private search and compact refresh control", async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
