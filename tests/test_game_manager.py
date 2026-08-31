@@ -116,18 +116,20 @@ async def test_seven_forces_the_next_player_to_draw_automatically(game):
     next_player = game.get_next_player()
     played = Card("7", "♠")
     current.hand = [played, Card("Q", "♠")]
-    next_player.hand = [Card("Q", "♦")]
+    next_player.hand = [Card("Q", "♠")]
     game.current_card = Card("9", "♠")
-    game.deck.deck = [Card("K", "♣")]
+    game.deck.deck = [Card("K", "♠"), Card("K", "♣")]
     game.deck.bounce_deck = []
 
     await manager.event_handler.handle_played_card(played.card_to_dict(), None, game, current.user_id)
     await manager.run_automatic_actions(game)
 
-    assert game.get_current_player() is current
+    assert game.get_current_player() is next_player
     assert len(next_player.hand) == 2
     assert not next_player.options.must_draw
     assert not next_player.options.must_skip
+    assert next_player.options.can_draw
+    assert not next_player.options.can_skip
     assert any(message["type"] == "adc" for message in next_player.websocket.sent)
 
 
@@ -149,15 +151,15 @@ async def test_ace_skips_both_required_turns_automatically(game):
 
 
 @pytest.mark.anyio
-async def test_eight_draws_two_and_skips_the_penalized_player(game):
+async def test_eight_draws_two_skips_the_penalized_player_and_returns_to_attacker(game):
     manager = setup_automatic_actions(game)
     current = game.get_current_player()
     penalized_player = game.get_next_player()
-    played = Card("8", "♠")
+    played = Card("8", "♥")
     current.hand = [played, Card("Q", "♥")]
-    penalized_player.hand = [Card("9", "♥")]
-    game.current_card = Card("9", "♠")
-    game.deck.deck = [Card("Q", "♣"), Card("K", "♦")]
+    penalized_player.hand = [Card("K", "♥")]
+    game.current_card = Card("9", "♥")
+    game.deck.deck = [Card("K", "♠"), Card("Q", "♣"), Card("K", "♦")]
     game.deck.bounce_deck = []
 
     await manager.event_handler.handle_played_card(played.card_to_dict(), None, game, current.user_id)
@@ -167,72 +169,102 @@ async def test_eight_draws_two_and_skips_the_penalized_player(game):
     assert len(penalized_player.hand) == 3
     assert penalized_player.options.must_draw == 0
     assert not penalized_player.options.must_skip
+    assert penalized_player.options.can_draw
+    assert not penalized_player.options.can_skip
+    assert current.get_playable_cards(game.current_card) == [current.hand[0]]
+    final_state = next(message for message in reversed(current.websocket.sent) if message["type"] == "gd")
+    assert final_state["current_player"] is True
+    assert final_state["playable_cards"] == [current.hand[0].card_to_dict()]
+    assert final_state["player_options"] == {
+        "must_draw": 0,
+        "must_skip": False,
+        "can_draw": True,
+        "can_skip": False,
+    }
 
 
 @pytest.mark.anyio
-async def test_eight_returns_to_blocked_player_and_draws_across_rounds(game):
+async def test_seven_keeps_optional_draw_across_rounds(game):
     manager = setup_automatic_actions(game)
-    human = game.get_current_player()
-    bot = game.get_next_player()
-    bot.is_bot = True
+    attacking_player = game.get_current_player()
+    penalized_player = game.get_next_player()
 
     for _ in range(4):
         game.reset_game()
-        game.current_player_index = game.players.index(human)
-        human.websocket.sent.clear()
-        bot.websocket.sent.clear()
+        game.current_player_index = game.players.index(attacking_player)
 
-        eight = Card("8", "♠")
-        blocked_card = Card("Q", "♥")
-        matching_draw = Card("K", "♠")
-        human.hand = [eight, blocked_card]
-        bot.hand = [Card("9", "♥")]
+        penalty_card = Card("7", "♠")
+        blocked_card = Card("Q", "♠")
+        optional_draw = Card("K", "♣")
+        attacking_player.hand = [penalty_card, Card("Q", "♠")]
+        penalized_player.hand = [blocked_card]
         game.current_card = Card("9", "♠")
-        game.deck.deck = [matching_draw, Card("Q", "♣"), Card("K", "♦")]
+        forced_draws = 1
+        forced_cards = [Card("9", "♠")]
+        game.deck.deck = [optional_draw, *forced_cards]
         game.deck.bounce_deck = []
 
         await manager.event_handler.handle_played_card(
-            eight.card_to_dict(),
+            penalty_card.card_to_dict(),
             None,
             game,
-            human.user_id,
+            attacking_player.user_id,
         )
         await manager.run_automatic_actions(game)
 
-        assert game.get_current_player() is human
-        assert human.hand == [blocked_card, matching_draw]
-        assert not human.options.can_draw
-        assert human.options.can_skip
-        assert human.get_playable_cards(game.current_card) == [matching_draw]
-        assert any(
-            message == {"type": "adc", "current_player": human.user_id}
-            for message in human.websocket.sent
+        assert game.get_current_player() is penalized_player
+        assert len(penalized_player.hand) == forced_draws + 1
+        assert penalized_player.options.must_draw == 0
+        assert not penalized_player.options.must_skip
+        assert penalized_player.options.can_draw
+        assert not penalized_player.options.can_skip
+
+        await manager.event_handler.handle_drew_card(game, penalized_player.user_id)
+
+        assert penalized_player.hand[-1] is optional_draw
+        assert not penalized_player.options.can_draw
+        assert penalized_player.options.can_skip
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("penalized_is_bot", [False, True], ids=["human", "bot"])
+async def test_eight_forces_draw_and_skip_across_rounds(game, penalized_is_bot):
+    manager = setup_automatic_actions(game)
+    attacking_player = game.get_current_player()
+    penalized_player = game.get_next_player()
+    penalized_player.is_bot = penalized_is_bot
+
+    for _ in range(4):
+        game.reset_game()
+        game.current_player_index = game.players.index(attacking_player)
+        eight = Card("8", "♥")
+        follow_up = Card("Q", "♥")
+        attacking_player.hand = [eight, follow_up]
+        penalized_player.hand = [Card("K", "♥")]
+        game.current_card = Card("9", "♥")
+        game.deck.deck = [Card("A", "♣"), Card("Q", "♣"), Card("K", "♦")]
+        game.deck.bounce_deck = []
+
+        await manager.event_handler.handle_played_card(
+            eight.card_to_dict(), None, game, attacking_player.user_id,
         )
-        assert any(
-            message["type"] == "wt" and message["current_player"] == human.user_id
-            for message in human.websocket.sent
-        )
-        automatic_only_states = [
-            message
-            for message in human.websocket.sent
-            if (
-            message["type"] == "gd"
-            and message["current_player"] is True
-            and message["player_options"] == {
-                "must_draw": 0,
-                "must_skip": False,
-                "can_draw": True,
-                "can_skip": False,
-            }
-            and not message["playable_cards"]
-            )
-        ]
-        assert automatic_only_states
-        assert all(message["automatic_action_pending"] for message in automatic_only_states)
+        await manager.run_automatic_actions(game)
+
+        assert game.get_current_player() is attacking_player
+        assert game.current_card is eight
+        assert attacking_player.get_playable_cards(game.current_card) == [follow_up]
+        assert len(penalized_player.hand) == 3
+        assert len(game.deck.deck) == 1
+        assert not penalized_player.options.must_draw
+        assert not penalized_player.options.must_skip
+        assert not any(message["type"] == "apc" for message in attacking_player.websocket.sent)
         final_state = next(
-            message for message in reversed(human.websocket.sent) if message["type"] == "gd"
+            message for message in reversed(attacking_player.websocket.sent)
+            if message["type"] == "gd"
         )
-        assert final_state["automatic_action_pending"] is False
+        assert final_state["current_player"] is True
+        assert final_state["playable_cards"] == [follow_up.card_to_dict()]
+        attacking_player.websocket.sent.clear()
 
 
 @pytest.mark.anyio
@@ -243,6 +275,7 @@ async def test_human_only_action_does_not_wait_for_the_bot_delay(game):
     matching_draw = Card("K", "♠")
     current.hand = [blocked_card]
     game.current_card = Card("9", "♠")
+    game.opening_turn_pending = False
     game.deck.deck = [matching_draw]
     game.deck.bounce_deck = []
     manager.bot_controller.action_delay = 60
@@ -386,21 +419,21 @@ async def test_regular_playable_card_preserves_draw_or_play_choice(game):
 
 
 @pytest.mark.anyio
-async def test_seven_matching_draw_preserves_play_or_skip_choice(game):
+async def test_seven_draw_preserves_play_draw_or_skip_choice(game):
     manager = setup_automatic_actions(game)
     current = game.get_current_player()
     next_player = game.get_next_player()
-    seven = Card("7", "♠")
-    blocked_card = Card("Q", "♦")
-    matching_draw = Card("K", "♠")
-    current.hand = [seven, Card("Q", "♠")]
-    next_player.hand = [blocked_card]
+    penalty_card = Card("7", "♠")
+    playable_card = Card("Q", "♠")
+    current.hand = [penalty_card, Card("9", "♥")]
+    next_player.hand = [playable_card]
     game.current_card = Card("9", "♠")
-    game.deck.deck = [matching_draw]
+    forced_draws = 1
+    game.deck.deck = [Card("K", "♣"), Card("Q", "♦")]
     game.deck.bounce_deck = []
 
     await manager.event_handler.handle_played_card(
-        seven.card_to_dict(),
+        penalty_card.card_to_dict(),
         None,
         game,
         current.user_id,
@@ -408,10 +441,10 @@ async def test_seven_matching_draw_preserves_play_or_skip_choice(game):
     await manager.run_automatic_actions(game)
 
     assert game.get_current_player() is next_player
-    assert next_player.hand == [blocked_card, matching_draw]
-    assert not next_player.options.can_draw
-    assert next_player.options.can_skip
-    assert next_player.get_playable_cards(game.current_card) == [matching_draw]
+    assert len(next_player.hand) == forced_draws + 1
+    assert next_player.options.can_draw
+    assert not next_player.options.can_skip
+    assert playable_card in next_player.get_playable_cards(game.current_card)
 
 
 @pytest.mark.anyio

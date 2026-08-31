@@ -40,6 +40,7 @@ class Game:
         self.is_active = True
         self.has_started = False
         self.round_over = False
+        self.opening_turn_pending = True
         self.bridge_pending_for = None
         self.current_player_index = 0
         self.chosen_suit = None
@@ -113,6 +114,7 @@ class Game:
         self.deck = Deck()
         self.is_active = True
         self.round_over = False
+        self.opening_turn_pending = True
         self.bridge_pending_for = None
         self.current_player_index = 0
         self.chosen_suit = None

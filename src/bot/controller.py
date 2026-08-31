@@ -26,6 +26,8 @@ class BotController:
             player = game.get_current_player()
             if not player.is_bot:
                 return
+            if game.opening_turn_pending:
+                return
 
             if self.action_delay:
                 await asyncio.sleep(self.action_delay)

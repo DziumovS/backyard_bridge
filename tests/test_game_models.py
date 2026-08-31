@@ -171,6 +171,7 @@ def test_reset_game_resets_round_state(game, monkeypatch):
     game.reset_game()
 
     assert game.is_active
+    assert game.opening_turn_pending
     assert game.current_player_index == 0
     assert game.chosen_suit is None
     assert game.last_cards_j == {}

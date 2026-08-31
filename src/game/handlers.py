@@ -310,6 +310,7 @@ class EventHandler:
             raise InvalidAction("Choose a suit for the Jack.")
         if card.rank != "J" and chosen_suit is not None:
             raise InvalidAction("A suit can only be chosen for a Jack.")
+        game.opening_turn_pending = False
         game.current_card = card
 
         game.chosen_suit = {
@@ -392,11 +393,11 @@ class EventHandler:
                 and not current_player.options.must_skip
                 and game.current_card.rank != "6"
             ):
+                current_player.options.can_draw = not game.deck.is_decks_empty()
+                current_player.options.can_skip = False
+            elif current_player.options.must_draw == 0 and current_player.options.must_skip:
                 current_player.options.can_draw = False
-                if playable_cards:
-                    current_player.options.can_skip = True
-                else:
-                    current_player.options.must_skip = True
+                current_player.options.can_skip = False
         elif current_player.options.must_skip:
             current_player.options.must_skip = False
         elif current_player.options.can_draw and not playable_cards:

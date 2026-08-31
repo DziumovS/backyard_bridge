@@ -2,6 +2,7 @@ from enum import StrEnum
 
 
 class AutomaticAction(StrEnum):
+    OPENING_TURN = "opening_turn"
     BOT_TURN = "bot_turn"
     DRAW = "draw"
     SKIP = "skip"
@@ -19,6 +20,8 @@ class AutomaticTurnController:
         player = game.get_current_player()
         if game.bridge_pending_for == player.user_id:
             return None
+        if game.opening_turn_pending:
+            return AutomaticAction.OPENING_TURN if player.is_bot else None
         if player.is_bot:
             return AutomaticAction.BOT_TURN
         if player.options.must_draw:
@@ -44,6 +47,21 @@ class AutomaticTurnController:
                 return
 
             player = game.get_current_player()
+            if action is AutomaticAction.OPENING_TURN:
+                card = game.current_card
+                chosen_suit = (
+                    self.game_manager.bot_controller.strategy.choose_suit(player, card)
+                    if card.rank == "J"
+                    else None
+                )
+                await self.game_manager.event_handler.handle_played_card(
+                    card.card_to_dict(),
+                    chosen_suit,
+                    game,
+                    player.user_id,
+                )
+                continue
+
             if action is AutomaticAction.BOT_TURN:
                 await self.game_manager.bot_controller.run_until_human_turn(game)
                 continue

@@ -23,7 +23,7 @@ All players then score the cards left in their hands.<br>
 
 <b>SPECIAL CARDS</b><br>
 <b>6</b> — Cover it with the same suit or rank, or with any Jack.<br>
-<b>7</b> — The next player must draw 1 card.<br>
+<b>7</b> — The next player draws 1 card, then must play or draw; after drawing, they may skip.<br>
 <b>8</b> — The next player must draw 2 cards and skip their turn.<br>
 <b>Jack</b> — Play it on any card, choose the next suit, and play multiple Jacks if you want.<br>
 <b>Ace</b> — The next player must skip their turn.<br>

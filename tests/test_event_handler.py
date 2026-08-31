@@ -123,9 +123,10 @@ async def test_game_over_penalty_draw_then_scores(game, monkeypatch):
 @pytest.mark.parametrize(
     ("must_draw", "must_skip", "can_draw", "expected"),
     [
-        (1, False, True, (0, True, False)),
-        (0, True, True, (0, False, True)),
-        (0, False, True, (0, True, True)),
+        (1, False, True, (0, False, True, False)),
+        (1, True, True, (0, True, False, False)),
+        (0, True, True, (0, False, True, False)),
+        (0, False, True, (0, True, True, False)),
     ],
 )
 async def test_draw_card_option_transitions(game, must_draw, must_skip, can_draw, expected):
@@ -139,7 +140,12 @@ async def test_draw_card_option_transitions(game, must_draw, must_skip, can_draw
 
     await handler.handle_drew_card(game)
 
-    assert (current.options.must_draw, current.options.must_skip, current.options.can_draw) == expected
+    assert (
+        current.options.must_draw,
+        current.options.must_skip,
+        current.options.can_draw,
+        current.options.can_skip,
+    ) == expected
 
 
 @pytest.mark.anyio
@@ -270,6 +276,7 @@ async def test_disconnect_player_returns_hand_transfers_effects_and_closes_game(
     leaving.hand = [returned_card]
     leaving.options.must_draw = 2
     leaving.options.must_skip = True
+    game.opening_turn_pending = False
     recipient = game.get_next_player()
     initial_deck_size = len(game.deck.deck)
     shuffled = []
@@ -285,6 +292,8 @@ async def test_disconnect_player_returns_hand_transfers_effects_and_closes_game(
     assert recipient.options.must_draw == 0
     assert not recipient.options.must_skip
     assert game.get_current_player() is not recipient
+    assert recipient.options.can_draw
+    assert not recipient.options.can_skip
     assert game.game_id in manager.games
 
     await handler.handle_disconnect_game(third.user_id)
