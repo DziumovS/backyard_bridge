@@ -186,22 +186,33 @@ test("empty lobby browser uses stacked private search and compact refresh contro
   expect(layout.codeWidth).toBeLessThan(layout.nameWidth * 1.2);
   const mobileInput = page.locator("#lobbyInput");
   const mobileJoin = page.locator("#joinLobbyButton");
-  const mobileInputWidth = await mobileInput.evaluate(element => element.getBoundingClientRect().width);
+  const mobileInputBox = await mobileInput.boundingBox();
   const mobileJoinLeft = await mobileJoin.evaluate(element => element.getBoundingClientRect().left);
   await mobileInput.tap();
   await page.waitForTimeout(250);
   const mobileFocus = await mobileInput.evaluate(element => {
     const style = getComputedStyle(element);
+    const box = element.getBoundingClientRect();
     return {
-      width: element.getBoundingClientRect().width,
+      top: box.top,
+      height: box.height,
+      width: box.width,
       outline: style.outlineStyle,
       shadow: style.boxShadow
     };
   });
-  expect(mobileFocus.width).toBeGreaterThan(mobileInputWidth);
+  expect(mobileFocus.width).toBeGreaterThan(mobileInputBox.width);
+  expect(mobileFocus.top).toBeCloseTo(mobileInputBox.y, 1);
+  expect(mobileFocus.height).toBeCloseTo(mobileInputBox.height, 1);
   expect(mobileFocus.outline).toBe("none");
   expect(mobileFocus.shadow).toContain("255, 165, 0");
   expect(await mobileJoin.evaluate(element => element.getBoundingClientRect().left)).toBe(mobileJoinLeft);
+  const modalContent = await page.locator("#lobby-browser-widget .lobby-modal-content").boundingBox();
+  await page.touchscreen.tap(modalContent.x + modalContent.width - 8, modalContent.y + modalContent.height - 8);
+  await page.waitForTimeout(250);
+  await expect(mobileInput).not.toBeFocused();
+  expect(await mobileInput.evaluate(element => getComputedStyle(element).boxShadow))
+    .not.toContain("255, 165, 0");
   const refresh = page.locator("#refreshLobbiesButton");
   await refresh.tap();
   await page.waitForTimeout(20);
@@ -209,6 +220,31 @@ test("empty lobby browser uses stacked private search and compact refresh contro
   const refreshShadow = await refresh.evaluate(button => getComputedStyle(button).boxShadow);
   expect(refreshShadow).not.toContain("255, 165, 0");
   await context.close();
+});
+
+test("mobile and tablet lobby search controls align to the content start", async ({ browser }) => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }]) {
+    const context = await browser.newContext({ viewport, hasTouch: true, isMobile: true });
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.getByRole("button", { name: "Join Lobby" }).tap();
+
+    const alignment = await page.locator("#lobby-browser-widget .lobby-modal-content")
+      .evaluate(content => {
+        const contentBox = content.getBoundingClientRect();
+        const codeBox = content.querySelector("#lobbyInput").getBoundingClientRect();
+        return {
+          actualInset: codeBox.left - contentBox.left,
+          expectedInset: Number.parseFloat(getComputedStyle(content).paddingLeft),
+          codeCenter: (codeBox.left + codeBox.right) / 2,
+          contentCenter: (contentBox.left + contentBox.right) / 2,
+        };
+      });
+
+    expect(alignment.actualInset).toBeCloseTo(alignment.expectedInset, 0);
+    expect(alignment.codeCenter).toBeLessThan(alignment.contentCenter);
+    await context.close();
+  }
 });
 
 test("the rules dialog keeps its desktop size and closes on mobile", async ({ browser }) => {
@@ -422,6 +458,9 @@ test("lobby rows share the longest width and align kick controls", async ({ brow
   const page = await context.newPage();
   await createLobby(page, 3);
   expect(await page.locator(".buttonContainer").evaluate(element => getComputedStyle(element).gap)).toBe("12px");
+  const desktopActionTops = await page.locator("#lobbyControls .buttonContainer button")
+    .evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().top));
+  expect(Math.max(...desktopActionTops) - Math.min(...desktopActionTops)).toBeLessThan(2);
   await expect(page.locator(".host-label")).toHaveCount(1);
   await expect(page.locator(".host-label")).toHaveText("HOST");
 
@@ -471,6 +510,23 @@ test("mobile tap clears Add Bot focus and sticky highlighting", async ({ browser
   });
   const page = await context.newPage();
   await page.goto("/");
+  const nameInput = page.locator("#nameInput");
+  await nameInput.tap();
+  await page.waitForTimeout(250);
+  const activeInputShadow = await nameInput.evaluate(element => ({
+    focused: document.activeElement === element,
+    boxShadow: getComputedStyle(element).boxShadow,
+  }));
+  expect(activeInputShadow.focused).toBe(true);
+  expect(activeInputShadow.boxShadow).toContain("255, 165, 0");
+  await page.touchscreen.tap(5, 400);
+  await page.waitForTimeout(250);
+  const inactiveInputShadow = await nameInput.evaluate(element => ({
+    focused: document.activeElement === element,
+    boxShadow: getComputedStyle(element).boxShadow,
+  }));
+  expect(inactiveInputShadow.focused).toBe(false);
+  expect(inactiveInputShadow.boxShadow).not.toContain("255, 165, 0");
   const homeLayout = await page.locator("#homeLobbyActions").evaluate(actions => {
     const create = actions.querySelector("#createLobbyButton").getBoundingClientRect();
     const join = actions.querySelector("#joinPublicLobbyButton").getBoundingClientRect();
@@ -506,6 +562,23 @@ test("mobile tap clears Add Bot focus and sticky highlighting", async ({ browser
   await page.getByRole("button", { name: "4", exact: true }).tap();
   await page.getByRole("button", { name: "Private", exact: true }).tap();
   await expect(page.locator(".player-name-row")).toHaveCount(1);
+
+  const lobbyActions = await page.locator("#lobbyControls .buttonContainer").evaluate(container => {
+    const buttons = ["startButton", "addBotButton", "leaveButton"]
+      .map(id => container.querySelector(`#${id}`).getBoundingClientRect());
+    return {
+      tops: buttons.map(button => button.top),
+      centers: buttons.map(button => (button.left + button.right) / 2),
+      widths: buttons.map(button => button.width),
+      lastBottom: buttons.at(-1).bottom,
+      viewportHeight: innerHeight,
+    };
+  });
+  expect(lobbyActions.tops[0]).toBeLessThan(lobbyActions.tops[1]);
+  expect(lobbyActions.tops[1]).toBeLessThan(lobbyActions.tops[2]);
+  expect(Math.max(...lobbyActions.centers) - Math.min(...lobbyActions.centers)).toBeLessThan(2);
+  expect(new Set(lobbyActions.widths).size).toBe(1);
+  expect(lobbyActions.lastBottom).toBeLessThanOrEqual(lobbyActions.viewportHeight);
 
   const addBot = page.getByRole("button", { name: "Add Bot" });
   await addBot.tap();

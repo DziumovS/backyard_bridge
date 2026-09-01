@@ -30,6 +30,7 @@ let reconnecting = false;
 let reconnectRequested = false;
 let automaticReconnectAttempts = 0;
 let leavingGame = false;
+let mobileInputViewportHeight = 0;
 const reconnectWindowMs = 60000;
 const automaticReconnectMaxAttempts = 5;
 const automaticReconnectDelayMs = 1000;
@@ -158,6 +159,41 @@ const elements = {
 
 elements.wsId.textContent = userName;
 elements.nameInput.placeholder = userName;
+const mobileTextInputs = new Set([elements.nameInput, elements.joinLobbyInput]);
+
+
+function usesTouchInput() {
+    return window.matchMedia?.("(hover: none) and (pointer: coarse)").matches === true;
+}
+
+
+function rememberMobileInputViewportHeight() {
+    if (usesTouchInput() && window.visualViewport) {
+        mobileInputViewportHeight = window.visualViewport.height;
+    }
+}
+
+
+function blurMobileInputOutside(event) {
+    const activeInput = document.activeElement;
+    if (usesTouchInput() && mobileTextInputs.has(activeInput)
+        && event.target !== activeInput) {
+        activeInput.blur();
+    }
+}
+
+
+function blurMobileInputWhenKeyboardCloses() {
+    if (!usesTouchInput() || !window.visualViewport) return;
+
+    const activeInput = document.activeElement;
+    const viewportHeight = window.visualViewport.height;
+    const keyboardClosed = mobileTextInputs.has(activeInput)
+        && mobileInputViewportHeight > 0
+        && viewportHeight - mobileInputViewportHeight > 80;
+    mobileInputViewportHeight = viewportHeight;
+    if (keyboardClosed) activeInput.blur();
+}
 
 
 function updatePrivateLobbyJoinState() {
@@ -172,6 +208,11 @@ elements.nameInput.addEventListener("input", function () {
     const inputText = elements.nameInput.value.trim();
     document.getElementById("changeName").disabled = inputText.length === 0;
 });
+mobileTextInputs.forEach(input => {
+    input.addEventListener("focus", rememberMobileInputViewportHeight);
+});
+document.addEventListener("pointerdown", blurMobileInputOutside);
+window.visualViewport?.addEventListener("resize", blurMobileInputWhenKeyboardCloses);
 
 elements.nameForm.addEventListener("submit", updateUsername);
 elements.rulesButton.addEventListener("click", showRulesWidget);

@@ -90,6 +90,10 @@ beforeEach(() => {
   app.elements.playerContainer.style.display = "none";
   app.elements.rightCard.innerHTML = '<img src="/right.png">';
   app.elements.leftCard.innerHTML = '<img src="/static/cards/closed_card.png">';
+  app.elements.nameInput.blur();
+  app.elements.joinLobbyInput.blur();
+  window.visualViewport.height = 800;
+  window.matchMedia.mockImplementation(() => ({ matches: false }));
   app.resetScoresRate();
 });
 
@@ -127,6 +131,32 @@ describe("URLs, identity and lobby", () => {
     app.setLobbyUI(false);
     expect(app.elements.startButton.style.display).toBe("none");
     expect(app.elements.addBotButton.style.display).toBe("none");
+  });
+
+  test("releases mobile text input focus outside the field and when the keyboard closes", () => {
+    window.matchMedia.mockImplementation(() => ({ matches: true }));
+
+    for (const input of [app.elements.nameInput, app.elements.joinLobbyInput]) {
+      input.focus();
+      expect(document.activeElement).toBe(input);
+      window.visualViewport.height = 500;
+      window.visualViewport.dispatchEvent(new Event("resize"));
+      expect(document.activeElement).toBe(input);
+      window.visualViewport.height = 800;
+      window.visualViewport.dispatchEvent(new Event("resize"));
+      expect(document.activeElement).not.toBe(input);
+
+      input.focus();
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      expect(document.activeElement).not.toBe(input);
+    }
+
+    window.matchMedia.mockImplementation(() => ({ matches: false }));
+    for (const input of [app.elements.nameInput, app.elements.joinLobbyInput]) {
+      input.focus();
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      expect(document.activeElement).toBe(input);
+    }
   });
 
   test("configures public and private lobbies with an exact player count", () => {

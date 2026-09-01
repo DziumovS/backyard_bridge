@@ -52,4 +52,16 @@ Object.defineProperty(navigator, "clipboard", {
   value: { writeText: vi.fn(() => Promise.resolve()) }
 });
 
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  value: vi.fn(() => ({ matches: false }))
+});
+
+const testVisualViewport = new EventTarget();
+testVisualViewport.height = 800;
+Object.defineProperty(window, "visualViewport", {
+  configurable: true,
+  value: testVisualViewport
+});
+
 globalThis.__BACKYARD_BRIDGE_TEST__ = true;

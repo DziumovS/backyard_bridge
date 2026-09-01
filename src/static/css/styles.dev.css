@@ -1358,13 +1358,23 @@ footer p {
         width: calc((100% - 9px) / 2);
     }
 
+    #lobbyControls .buttonContainer {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    #lobbyControls .buttonContainer button {
+        width: min(180px, 70vw);
+    }
+
     .lobby-modal-content {
         width: calc(100vw - 4px);
         padding: 22px 4px 16px;
     }
 
     .lobby-browser-header {
-        justify-content: center;
+        justify-content: flex-start;
         padding-right: 0;
     }
 
@@ -1374,7 +1384,7 @@ footer p {
         column-gap: 5px;
         row-gap: 5px;
         align-items: center;
-        justify-content: center;
+        justify-content: start;
     }
 
     .private-code-search {
@@ -1512,6 +1522,17 @@ footer p {
 }
 
 @media (hover: none) and (pointer: coarse) {
+    #nameInput:hover:not(:focus),
+    #lobbyInput:hover:not(:focus) {
+        transform: none;
+        box-shadow: 2px 2px 5px 2px rgb(108 108 108 / 70%);
+    }
+
+    #lobbyInput:focus {
+        transform: scaleX(1.03);
+        transform-origin: left center;
+    }
+
     #addBotButton:hover,
     #addBotButton:focus,
     #addBotButton:focus-visible {
