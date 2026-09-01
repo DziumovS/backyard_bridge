@@ -1060,6 +1060,139 @@ describe("messages and game UI", () => {
   });
 });
 
+describe("complete lobby control matrix", () => {
+  test.each([
+    [false, 2], [false, 3], [false, 4],
+    [true, 2], [true, 3], [true, 4],
+  ])("creates is_public=%s with max_players=%i", (isPublic, maxPlayers) => {
+    app.openCreateLobbyWidget();
+    app.selectLobbySize(maxPlayers);
+    app.createLobby(isPublic);
+    const socket = FakeWebSocket.instances.at(-1);
+    socket.onopen();
+
+    expect(socket.sent).toEqual([{
+      type: "crl",
+      user_name: "Me",
+      is_public: isPublic,
+      max_players: maxPlayers,
+    }]);
+    expect(app.elements.createLobbyWidget.style.display).toBe("none");
+    expect([...app.elements.playerCountButtons].filter(button =>
+      button.getAttribute("aria-pressed") === "true"
+    ).map(button => Number(button.dataset.playerCount))).toEqual([maxPlayers]);
+    app.setState({ ws: null });
+  });
+
+  test.each([
+    ["", true],
+    ["a", true],
+    ["abcde", true],
+    ["abcdef", false],
+    [" abcdef ", false],
+    ["abcdefg", true],
+  ])("enables private Join only for one complete code: %j", (value, disabled) => {
+    app.elements.joinLobbyInput.value = value;
+    app.elements.joinLobbyInput.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(app.elements.joinLobbyButton.disabled).toBe(disabled);
+  });
+
+  test("keeps untrusted lobby names as text and exposes accessible controls", () => {
+    const malicious = '<img src=x onerror="globalThis.injected=true">';
+    globalThis.injected = false;
+    app.renderAvailableLobbies([
+      {
+        lobby_id: "abc123",
+        name: `${malicious}'s lobby`,
+        players: 1,
+        max_players: 2,
+        is_private: false,
+      },
+      {
+        name: "Private Host's lobby",
+        players: 2,
+        max_players: 4,
+        is_private: true,
+      },
+    ]);
+
+    const rows = app.elements.availableLobbiesList.querySelectorAll(".available-lobby-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain(malicious);
+    expect(rows[0].querySelector("img")).toBeNull();
+    expect(globalThis.injected).toBe(false);
+    expect(rows[0].getAttribute("role")).toBe("button");
+    expect(rows[0].getAttribute("aria-label")).toContain(malicious);
+    expect(rows[0].querySelector(".available-lobby-capacity").textContent).toBe("1/2");
+    expect(rows[1].querySelector("[role='img']").getAttribute("aria-label"))
+      .toBe("Private lobby");
+    expect(rows[1].querySelector(".available-lobby-join-button").getAttribute("aria-label"))
+      .toBe("Join Private Host's lobby");
+  });
+
+  test("applies every lobby server state to the matching controls", () => {
+    const lobby = {
+      lobby_id: "abcdef",
+      lobby_name: "Host's lobby",
+      is_public: false,
+      max_players: 3,
+    };
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "lcr", ...lobby }) });
+    expect(app.getState().currentPhase).toBe("lobby");
+    expect(app.elements.startButton.style.display).toBe("block");
+    expect(app.elements.addBotButton.style.display).toBe("block");
+    expect(app.elements.leaveLobbyButton.style.display).toBe("inline");
+
+    const users = [
+      { user_id: "me", user_name: "Host", is_host: true, is_bot: false },
+      { user_id: "bot", user_name: "Alex Bot", is_host: false, is_bot: true },
+      { user_id: "guest", user_name: "Guest", is_host: false, is_bot: false },
+    ];
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "uu", users, is_host: true, max_players: 3 })
+    });
+    expect(app.elements.usersList.children).toHaveLength(3);
+    expect(app.elements.usersList.querySelectorAll(".kick-player-button")).toHaveLength(2);
+    expect(app.elements.addBotButton.disabled).toBe(true);
+    expect(document.getElementById("lobbySummaryMeta").textContent).toContain("3/3 players");
+
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "tsb", enable: false }) });
+    expect(app.elements.startButton.disabled).toBe(true);
+    app.handleWebSocketMessage({ data: JSON.stringify({ type: "tsb", enable: true }) });
+    expect(app.elements.startButton.disabled).toBe(false);
+  });
+
+  test("guest lobby view hides host-only actions and explicit Leave returns home", () => {
+    const socket = new FakeWebSocket("lobby");
+    app.setState({ ws: socket, currentPhase: "lobby", isHost: false });
+    app.setLobbyUI(false);
+    expect(app.elements.startButton.style.display).toBe("none");
+    expect(app.elements.addBotButton.style.display).toBe("none");
+    expect(app.elements.leaveLobbyButton.style.display).toBe("inline");
+
+    app.leaveLobby();
+    expect(socket.sent).toEqual([{ type: "cll", lobby_id: "abcdef" }]);
+    expect(socket.onclose).toBeNull();
+    expect(app.getState().currentPhase).toBe("home");
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    expect(app.elements.lobbyControls.style.display).toBe("none");
+  });
+
+  test("Escape closes every lobby modal without creating or joining", async () => {
+    globalThis.fetch.mockResolvedValue({ json: async () => [] });
+    app.openCreateLobbyWidget();
+    app.openLobbyBrowser();
+    await Promise.resolve();
+    expect(app.elements.createLobbyWidget.style.display).toBe("flex");
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("flex");
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(app.elements.createLobbyWidget.style.display).toBe("none");
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("none");
+    expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+});
+
 describe("turn actions and widgets", () => {
   test("plays local and opponent cards with animations", async () => {
     vi.useFakeTimers();

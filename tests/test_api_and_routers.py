@@ -62,6 +62,9 @@ def test_http_endpoints(monkeypatch):
     assert static_css.headers["cache-control"] == "no-cache"
     static_js = client.get("/static/js/script.js")
     assert static_js.headers["cache-control"] == "no-cache"
+    static_image = client.get("/static/favicon.ico")
+    assert static_image.status_code == 200
+    assert static_image.headers["cache-control"] == "public, max-age=86400"
     assert static_css.headers["content-encoding"] == "gzip"
     assert response.headers["cache-control"] == "no-store"
 
@@ -883,6 +886,11 @@ async def test_lobby_router_close_and_disconnect_codes(monkeypatch):
     monkeypatch.setattr(lobby_manager, "get_lobby_by_user_id", lambda user_id: object())
     await websocket_lobby(FakeWebSocket([{"type": "cll"}]), "user")
     assert disconnect.await_count == 1
+
+    disconnect.reset_mock()
+    monkeypatch.setattr(lobby_manager, "get_lobby_by_user_id", lambda user_id: None)
+    await websocket_lobby(FakeWebSocket([{"type": "cll"}]), "user")
+    assert disconnect.await_count == 0
 
     for code in (1001, 1012, 1000):
         disconnect.reset_mock()

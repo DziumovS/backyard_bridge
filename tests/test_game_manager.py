@@ -35,6 +35,17 @@ def test_game_manager_keeps_player_index_in_sync(game, players):
     assert manager.get_game_by_player_id(game.players[0].user_id) is None
 
 
+def test_removing_every_player_resets_the_current_index(game):
+    manager = GameManager(ConnectionManager())
+    manager.create_game(game)
+
+    for player in list(game.players):
+        manager.remove_player(game, player)
+
+    assert game.players == []
+    assert game.current_player_index == 0
+
+
 def test_removing_player_preserves_current_player(game, players):
     manager = GameManager(ConnectionManager())
     manager.create_game(game)
@@ -284,6 +295,31 @@ async def test_human_only_action_does_not_wait_for_the_bot_delay(game):
 
     assert current.hand == [blocked_card, matching_draw]
     assert current.options.can_skip
+
+
+@pytest.mark.anyio
+async def test_automatic_draw_stops_safely_when_both_decks_are_empty(game):
+    manager = setup_automatic_actions(game)
+    current = game.get_current_player()
+    current.options.must_draw = 1
+    game.opening_turn_pending = False
+    game.deck.deck = []
+    game.deck.bounce_deck = []
+
+    await manager.run_automatic_actions(game)
+
+    assert current.options.must_draw == 1
+
+
+@pytest.mark.anyio
+async def test_automatic_action_loop_has_a_hard_safety_limit(game, monkeypatch):
+    manager = setup_automatic_actions(game)
+    controller = manager.automatic_turn_controller
+    monkeypatch.setattr(controller, "next_action", lambda current_game: "skip")
+    monkeypatch.setattr(manager.event_handler, "handle_skip_turn", lambda *args, **kwargs: asyncio.sleep(0))
+
+    with pytest.raises(RuntimeError, match="limit exceeded"):
+        await controller.run(game)
 
 
 @pytest.mark.anyio

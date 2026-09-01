@@ -46,6 +46,7 @@ async def test_game_connection_readiness(game):
     assert not initialized.done()
     game.mark_client_initialized(game.players[1].user_id)
     await initialized
+    assert not game.mark_client_initialized(game.players[1].user_id)
 
     game.all_connected_event.clear()
     game.all_ready_event.clear()

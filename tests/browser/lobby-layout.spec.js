@@ -1042,3 +1042,204 @@ for (const isPublic of [true, false]) {
     });
   }
 }
+
+test("every home and lobby-browser control works on desktop and mobile", async ({ browser }) => {
+  for (const device of [
+    { viewport: { width: 1200, height: 800 }, hasTouch: false, isMobile: false },
+    { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true },
+  ]) {
+    const context = await browser.newContext(device);
+    const page = await context.newPage();
+    await page.goto("/");
+
+    const changeName = page.getByRole("button", { name: "Change name" });
+    await expect(changeName).toBeDisabled();
+    await page.locator("#nameInput").fill("LobbyTester");
+    await expect(changeName).toBeEnabled();
+    await changeName.click();
+    await expect(page.locator("#ws-id")).toHaveText("LobbyTester");
+
+    await page.getByRole("button", { name: "Rules" }).click();
+    await expect(page.locator("#rules-widget")).toBeVisible();
+    await page.locator("#closeRulesWidget").click();
+    await expect(page.locator("#rules-widget")).toBeHidden();
+
+    await page.getByRole("button", { name: "Create Lobby", exact: true }).click();
+    const createDialog = page.getByRole("dialog", { name: "Create Lobby" });
+    await expect(createDialog.getByRole("button", { name: "Public", exact: true })).toBeEnabled();
+    await expect(createDialog.getByRole("button", { name: "Private", exact: true })).toBeEnabled();
+    await expect(createDialog).toContainText("Any player can find and join");
+    await expect(createDialog).toContainText("Code required to join");
+    for (const size of [2, 3, 4]) {
+      await createDialog.getByRole("button", { name: String(size), exact: true }).click();
+      await expect(createDialog.getByRole("button", { name: String(size), exact: true }))
+        .toHaveAttribute("aria-pressed", "true");
+      await expect(createDialog.locator("[data-player-count][aria-pressed='true']")).toHaveCount(1);
+    }
+    await page.locator("#closeCreateLobbyWidget").click();
+    await expect(createDialog).toBeHidden();
+
+    await page.getByRole("button", { name: "Join Lobby", exact: true }).click();
+    const joinDialog = page.getByRole("dialog", { name: "Available lobbies" });
+    const codeInput = joinDialog.locator("#lobbyInput");
+    const joinButton = joinDialog.getByRole("button", { name: "Join", exact: true });
+    await expect(joinDialog.getByRole("button", { name: "Refresh" })).toBeEnabled();
+    await expect(joinButton).toBeDisabled();
+    await codeInput.fill("abcde");
+    await expect(joinButton).toBeDisabled();
+    await codeInput.fill("abcdef");
+    await expect(joinButton).toBeEnabled();
+    await codeInput.fill("");
+    await expect(joinButton).toBeDisabled();
+    await joinDialog.getByRole("button", { name: "Refresh" }).click();
+    await expect(joinDialog.locator("#availableLobbiesEmpty"))
+      .toHaveText("No lobbies are available yet");
+    await page.locator("#closeLobbyBrowserWidget").click();
+    await expect(joinDialog).toBeHidden();
+
+    await context.close();
+  }
+});
+
+test("a guest can leave, capacity updates, and Quick Play can rejoin", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
+  });
+  const observerContext = await browser.newContext();
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  const observer = await observerContext.newPage();
+  try {
+    await createLobby(host, 0, { maxPlayers: 3, isPublic: true });
+    await joinConfiguredLobby(guest, {
+      hostName: "A", code: "", isPublic: true, playerName: "Guest",
+    });
+    await expect(host.locator(".player-name-row")).toHaveCount(2);
+    await expect(host.getByRole("button", { name: "Start Game" })).toBeEnabled();
+
+    await observer.goto("/");
+    await observer.getByRole("button", { name: "Join Lobby" }).click();
+    const row = observer.locator(".available-lobby-row").filter({ hasText: "A's lobby" });
+    await expect(row.locator(".available-lobby-capacity")).toHaveText("2/3");
+
+    await guest.getByRole("button", { name: "Leave Lobby" }).click();
+    await expect(guest.locator("#homeLobbyActions")).toBeVisible();
+    await expect(host.locator(".player-name-row")).toHaveCount(1);
+    await expect(host.getByRole("button", { name: "Start Game" })).toBeDisabled();
+    await expect(row.locator(".available-lobby-capacity")).toHaveText("1/3", { timeout: 5500 });
+
+    await guest.getByRole("button", { name: "Quick Play" }).click();
+    await expect(guest.locator(".lobby-summary-name")).toHaveText("A's lobby");
+    await expect(host.locator(".player-name-row")).toHaveCount(2);
+  } finally {
+    await observerContext.close();
+    await guestContext.close();
+    await hostContext.close();
+  }
+});
+
+test("explicit host Leave Lobby closes the room for every guest", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  const observerContext = await browser.newContext();
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  const observer = await observerContext.newPage();
+  try {
+    await createLobby(host, 0, { maxPlayers: 3, isPublic: true });
+    await joinConfiguredLobby(guest, {
+      hostName: "A", code: "", isPublic: true, playerName: "Guest",
+    });
+
+    await host.getByRole("button", { name: "Leave Lobby" }).click();
+    await expect(host.locator("#homeLobbyActions")).toBeVisible();
+    await expect(guest.locator("#homeLobbyActions")).toBeVisible();
+    await expect(guest.locator("#errorMessage")).toContainText("The host left the lobby");
+
+    await observer.goto("/");
+    await observer.getByRole("button", { name: "Join Lobby" }).click();
+    await expect(observer.locator(".available-lobby-row")).toHaveCount(0);
+    await expect(observer.locator("#availableLobbiesEmpty")).toBeVisible();
+  } finally {
+    await observerContext.close();
+    await guestContext.close();
+    await hostContext.close();
+  }
+});
+
+test("a full private lobby rejects its valid code until a seat opens", async ({ browser }) => {
+  const hostContext = await browser.newContext();
+  const guestContext = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
+  });
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  try {
+    await createLobby(host, 1, { maxPlayers: 2, isPublic: false });
+    await expect(host.getByRole("button", { name: "Add Bot" })).toBeDisabled();
+    const code = (await host.locator(".lobby-code-button").textContent()).match(/[0-9a-f]{6}/)[0];
+
+    await guest.goto("/");
+    await guest.getByRole("button", { name: "Join Lobby" }).click();
+    await guest.locator("#lobbyInput").fill(code);
+    await guest.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(guest.locator("#lobby-browser-widget")).toBeVisible();
+    await expect(guest.locator("#lobbyBrowserError")).toHaveText("The private lobby was not found");
+
+    await host.locator(".kick-player-button").click();
+    await expect(host.locator(".player-name-row")).toHaveCount(1);
+    await expect(host.getByRole("button", { name: "Add Bot" })).toBeEnabled();
+    await guest.locator("#lobbyInput").fill(code);
+    await guest.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(guest.locator(".lobby-summary-name")).toHaveText("A's lobby");
+    await expect(host.locator(".player-name-row")).toHaveCount(2);
+  } finally {
+    await guestContext.close();
+    await hostContext.close();
+  }
+});
+
+test("bot add and remove controls cover every supported lobby capacity", async ({ browser }) => {
+  test.setTimeout(60_000);
+  for (const maxPlayers of [2, 3, 4]) {
+    const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+    const host = await context.newPage();
+    await createLobby(host, 0, { maxPlayers, isPublic: false });
+    const addBot = host.getByRole("button", { name: "Add Bot" });
+
+    for (let players = 2; players <= maxPlayers; players += 1) {
+      await addBot.click();
+      await expect(host.locator(".player-name-row")).toHaveCount(players);
+      await expect(host.locator(".lobby-summary-meta")).toContainText(
+        `${players}/${maxPlayers} players`
+      );
+    }
+    await expect(addBot).toBeDisabled();
+    await expect(host.locator(".kick-player-button")).toHaveCount(maxPlayers - 1);
+    await expect(host.getByRole("button", { name: "Start Game" })).toBeEnabled();
+
+    for (let remaining = maxPlayers - 1; remaining > 0; remaining -= 1) {
+      await host.locator(".kick-player-button").last().click();
+      await expect(host.locator(".kick-player-button")).toHaveCount(remaining - 1);
+    }
+    await expect(host.locator(".player-name-row")).toHaveCount(1);
+    await expect(addBot).toBeEnabled();
+    await expect(host.getByRole("button", { name: "Start Game" })).toBeDisabled();
+    await context.close();
+  }
+});
+
+test("Quick Play with no public room reports the empty state and stays home", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Quick Play" }).click();
+  await expect(page.locator("#homeLobbyActions")).toBeVisible();
+  await expect(page.locator("#lobbyControls")).toBeHidden();
+  await expect(page.locator("#errorMessage")).toContainText("No public lobbies are available yet");
+  await expect(page.getByRole("button", { name: "Quick Play" })).toBeEnabled();
+  await context.close();
+});

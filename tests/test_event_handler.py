@@ -44,6 +44,7 @@ async def test_play_normal_card_broadcasts_state(game):
     played = Card("9", "♥")
     current.hand = [played, Card("Q", "♥")]
     game.current_card = previous
+    game.last_cards_j[current.user_id] = 1
 
     await handler.handle_played_card(played.card_to_dict(), None, game)
 
@@ -51,6 +52,7 @@ async def test_play_normal_card_broadcasts_state(game):
     assert played not in current.hand
     assert game.deck.bounce_deck[0] is previous
     assert all(player.websocket.sent[-1]["type"] == "gd" for player in game.players)
+    assert game.last_cards_j[current.user_id] == 1
 
 
 @pytest.mark.anyio
@@ -97,6 +99,39 @@ async def test_playing_eight_with_empty_deck_finishes_round(game):
     await handler.handle_played_card(played.card_to_dict(), None, game)
 
     assert game.why_end == "empty_deck"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("played", [Card("Q", "♠"), Card("8", "♠")])
+async def test_existing_round_reason_is_not_overwritten(game, played):
+    _, handler = setup_manager(game)
+    current = game.get_current_player()
+    current.hand = [played] if played.rank == "Q" else [played, Card("Q", "♠")]
+    game.current_card = Card("9", "♠")
+    game.why_end = "bridge"
+    if played.rank == "8":
+        game.deck.deck = []
+        game.deck.bounce_deck = []
+
+    await handler.handle_played_card(played.card_to_dict(), None, game)
+
+    assert game.why_end == "bridge"
+
+
+@pytest.mark.anyio
+async def test_bridge_prompt_is_safe_for_a_server_only_player(game):
+    _, handler = setup_manager(game)
+    current = game.get_current_player()
+    current.websocket = None
+    jack = Card("J", "♥")
+    current.hand = [jack, Card("J", "♦")]
+    game.current_card = Card("9", "♠")
+    game.four_of_a_kind_tracker.current_rank = "J"
+    game.four_of_a_kind_tracker.count = 3
+
+    await handler.handle_played_card(jack.card_to_dict(), "♣", game)
+
+    assert game.bridge_pending_for == current.user_id
 
 
 @pytest.mark.anyio
@@ -243,6 +278,36 @@ async def test_skip_turn_with_empty_deck_ends_when_no_cards_playable(game):
 
 
 @pytest.mark.anyio
+async def test_skip_turn_with_empty_deck_continues_when_a_card_is_playable(game):
+    _, handler = setup_manager(game)
+    game.current_card = Card("9", "♠")
+    game.get_next_player().hand = [Card("Q", "♠")]
+    game.deck.deck = []
+    game.deck.bounce_deck = []
+    game.get_current_player().options.can_skip = True
+
+    await handler.handle_skip_turn(game)
+
+    assert game.why_end is None
+    assert not game.get_current_player().options.can_draw
+
+
+@pytest.mark.anyio
+async def test_skip_turn_preserves_an_existing_empty_deck_reason(game):
+    _, handler = setup_manager(game)
+    game.current_card = Card("9", "♠")
+    game.get_next_player().hand = [Card("Q", "♥")]
+    game.deck.deck = []
+    game.deck.bounce_deck = []
+    game.why_end = "bridge"
+    game.get_current_player().options.can_skip = True
+
+    await handler.handle_skip_turn(game)
+
+    assert game.why_end == "bridge"
+
+
+@pytest.mark.anyio
 async def test_show_move_broadcasts_play_and_draw_animations(game):
     _, handler = setup_manager(game)
     from src.game.errors import InvalidAction
@@ -335,6 +400,16 @@ async def test_explicit_host_leave_uses_immediate_leave_message(game):
 async def test_disconnect_unknown_player_is_noop(game):
     _, handler = setup_manager(game)
     await handler.handle_disconnect_game("missing")
+
+
+@pytest.mark.anyio
+async def test_disconnect_stale_player_mapping_is_noop(game):
+    manager, handler = setup_manager(game)
+    manager._game_ids_by_player["ghost"] = game.game_id
+
+    await handler.handle_disconnect_game("ghost")
+
+    assert manager.get_game(game.game_id) is game
 
 
 @pytest.mark.anyio
