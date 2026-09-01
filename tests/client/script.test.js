@@ -1253,6 +1253,51 @@ describe("messages, rules, scores and loading", () => {
     expect(app.elements.playerHand.children).toHaveLength(2);
   });
 
+  test("discards queued game state after returning to the home page", async () => {
+    vi.useFakeTimers();
+    app.setState({ userId: "me", currentPlayer: "me", currentPhase: "game" });
+    const players = [
+      { user_id: "me", user_name: "Me", scores: 0 },
+      { user_id: "other", user_name: "Other", scores: 0 }
+    ];
+    app.updateUsers(players, false);
+    app.updatePlayerHand([{ rank: "9", suit: "♠" }], true, [], "current");
+
+    const animation = app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "adc", current_player: "me" })
+    });
+    const staleState = app.handleWebSocketMessage({
+      data: JSON.stringify({
+        type: "gd",
+        scores_rate: "x1",
+        hand: [{ rank: "9", suit: "♠" }, { rank: "Q", suit: "♥" }],
+        current_player: true,
+        playable_cards: [],
+        players,
+        players_hands: [
+          { player_id: "me", hand_len: 2 },
+          { player_id: "other", hand_len: 1 }
+        ],
+        current_card: { rank: "9", suit: "♦" },
+        deck_len: 20,
+        chosen_suit: null,
+        player_options: { must_draw: 0, must_skip: false, can_draw: false, can_skip: true },
+        is_host: false
+      })
+    });
+
+    app.handleWebSocketMessage({
+      data: JSON.stringify({ type: "nep", msg: "The host left the game" })
+    });
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    expect(app.elements.playerHand.children).toHaveLength(0);
+
+    await vi.runAllTimersAsync();
+    await Promise.all([animation, staleState]);
+    expect(app.elements.homeLobbyActions.style.display).toBe("grid");
+    expect(app.elements.playerHand.children).toHaveLength(0);
+  });
+
   test("finishes card movement when the browser reports the transition end", async () => {
     vi.useFakeTimers();
     const card = document.createElement("img");

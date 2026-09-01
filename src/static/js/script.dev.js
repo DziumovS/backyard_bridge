@@ -1103,6 +1103,7 @@ function performLeaveActiveGame() {
 
 
 function returnToMainPage(preserveGameSession = false) {
+    gameEventQueue.reset();
     elements.lobbyControls.style.display = "none";
     elements.welcomeMessage.style.display = "block";
     elements.homeLobbyActions.style.display = "grid";
