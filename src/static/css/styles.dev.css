@@ -1230,6 +1230,7 @@ footer p {
 .lobby-browser-close:hover,
 .lobby-browser-close:active {
     transform: none;
+    box-shadow: 0 0 13px 15px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes waveText {

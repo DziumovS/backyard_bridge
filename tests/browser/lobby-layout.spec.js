@@ -777,6 +777,16 @@ test("public lobby is discoverable and joins at the configured capacity", async 
   expect(browserGeometry.aligned).toBe(true);
   expect(browserGeometry.boldText).toBe("Alice");
   expect(browserGeometry.fullNameBold).toBe(false);
+  const closeLobbyBrowser = guest.locator("#closeLobbyBrowserWidget");
+  await closeLobbyBrowser.hover();
+  await guest.waitForTimeout(250);
+  const closeHoverStyle = await closeLobbyBrowser.evaluate(element => {
+    const style = getComputedStyle(element);
+    return { backgroundColor: style.backgroundColor, boxShadow: style.boxShadow };
+  });
+  expect(closeHoverStyle.backgroundColor).toBe("rgb(221, 221, 221)");
+  expect(closeHoverStyle.boxShadow).toContain("rgba(0, 0, 0, 0.3)");
+  expect(closeHoverStyle.boxShadow).not.toContain("255, 165, 0");
   await guest.getByRole("button", { name: "Join Alice's lobby" }).click();
 
   await expect(guest.locator(".lobby-summary-name")).toHaveText("Alice's lobby");
