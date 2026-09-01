@@ -11,7 +11,8 @@ from src.deck.router import router as deck_router
 from src.config import BASE_DIR, get_allowed_origins, use_dev_assets
 
 app = FastAPI(
-    title="Backyard bridge"
+    title="Backyard bridge",
+    version="2.1.0",
 )
 
 app.mount(

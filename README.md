@@ -1,4 +1,6 @@
 # Backyard bridge
+Current release: `v.2.1`
+
 Backyard Bridge is a real-time multiplayer card game inspired by UNO for
 2-4 players. Play with friends, fill empty seats with competitive
 server-controlled bots, or combine human players and bots in the same game.
@@ -116,10 +118,12 @@ npm test
 ```
 
 The server suite includes real WebSocket sessions for every supported player
-count (2, 3, and 4). Both server and client coverage thresholds are at least
-99%. Browser tests cover responsive lobby geometry, mobile touch focus,
-public/private discovery and joining, private codes, and Quick Play capacity
-selection. Install Chromium
+count (2, 3, and 4) and every public/private lobby configuration. Both server
+and client coverage thresholds are at least 99%. Browser tests cover desktop
+and mobile lobby controls, responsive geometry, touch focus, public/private
+discovery and joining, invalid and full private rooms, guest and host exits,
+bot add/remove cycles, automatic capacity refresh, Quick Play, kicking,
+starting, and active 2/3/4-player sessions. Install Chromium
 once with `npx playwright install chromium` before running `npm test` locally.
 GitHub Actions runs every suite for pushes and pull requests.
 

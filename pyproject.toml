@@ -1,6 +1,6 @@
 [project]
 name = "backyard-bridge"
-version = "0.1.0"
+version = "2.1.0"
 description = "A multiplayer card game inspired by UNO"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"

@@ -8,7 +8,24 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - name: Verify lockfile
+        run: uv lock --check
+      - name: Install backend dependencies
+        run: uv sync --locked --dev
+      - name: Run backend tests
+        run: uv run --locked pytest
+
+  frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -22,8 +39,11 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: uv sync --locked --dev
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: uv run --locked pytest
-      - run: npm test
+      - name: Install application runtime
+        run: uv sync --locked --no-dev
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run client and browser tests
+        run: npm test
