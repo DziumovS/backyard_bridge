@@ -151,6 +151,11 @@ describe("URLs, identity and lobby", () => {
       expect(document.activeElement).not.toBe(input);
     }
 
+    app.elements.joinLobbyInput.focus();
+    app.elements.joinLobbyButton.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(document.activeElement).toBe(app.elements.joinLobbyInput);
+    app.elements.joinLobbyInput.blur();
+
     window.matchMedia.mockImplementation(() => ({ matches: false }));
     for (const input of [app.elements.nameInput, app.elements.joinLobbyInput]) {
       input.focus();
@@ -379,6 +384,7 @@ describe("URLs, identity and lobby", () => {
     app.handleWebSocketMessage({
       data: JSON.stringify({ type: "se", msg: "The lobby doesn't exist or is full." })
     });
+    expect(app.elements.lobbyBrowserWidget.style.display).toBe("flex");
     expect(app.elements.lobbyBrowserError.textContent).toBe("The private lobby was not found");
     expect(app.elements.lobbyControls.style.display).not.toBe("block");
     await vi.advanceTimersByTimeAsync(2999);
@@ -415,7 +421,7 @@ describe("URLs, identity and lobby", () => {
     app.elements.closeLobbyBrowserWidget.click();
     expect(app.elements.lobbyBrowserWidget.style.display).toBe("none");
     app.openLobbyBrowser();
-    app.elements.lobbyBrowserWidget.click();
+    app.elements.lobbyBrowserWidget.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     expect(app.elements.lobbyBrowserWidget.style.display).toBe("none");
 
     app.renderAvailableLobbies([

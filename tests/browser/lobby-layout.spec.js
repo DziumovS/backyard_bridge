@@ -910,6 +910,7 @@ test("private lobby is listed with a lock and joins only after entering its code
   await guest.locator("#lobbyInput").fill("deadbe");
   await guest.getByRole("button", { name: "Join", exact: true }).click();
   await expect(guest.locator("#lobbyInput")).toHaveValue("");
+  await expect(guest.locator("#lobby-browser-widget")).toBeVisible();
   await expect(guest.locator("#lobbyBrowserError")).toContainText("not found");
   await guest.waitForTimeout(20);
   const privateFocus = await guest.locator("#lobby-browser-widget").evaluate(widget => {

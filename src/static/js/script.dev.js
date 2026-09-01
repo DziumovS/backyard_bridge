@@ -176,8 +176,9 @@ function rememberMobileInputViewportHeight() {
 
 function blurMobileInputOutside(event) {
     const activeInput = document.activeElement;
+    const interactiveTarget = event.target.closest?.("button, a, [role='button']");
     if (usesTouchInput() && mobileTextInputs.has(activeInput)
-        && event.target !== activeInput) {
+        && event.target !== activeInput && !interactiveTarget) {
         activeInput.blur();
     }
 }
@@ -230,7 +231,7 @@ elements.createLobbyWidget.addEventListener("click", event => {
     if (event.target === elements.createLobbyWidget) closeCreateLobbyWidget();
 });
 elements.closeLobbyBrowserWidget.addEventListener("click", closeLobbyBrowser);
-elements.lobbyBrowserWidget.addEventListener("click", event => {
+elements.lobbyBrowserWidget.addEventListener("pointerdown", event => {
     if (event.target === elements.lobbyBrowserWidget) closeLobbyBrowser();
 });
 elements.refreshLobbiesButton.addEventListener("click", refreshAvailableLobbies);
